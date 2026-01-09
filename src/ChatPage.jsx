@@ -46,6 +46,39 @@ function classifyLine(line) {
   return { icon: '•', tone: 'neutral' };
 }
 
+function makeId() {
+  // Preferido: crypto.randomUUID (si existe)
+  if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+
+  // Fallback: crypto.getRandomValues (si existe) -> UUID v4
+  if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === 'function') {
+    const bytes = new Uint8Array(16);
+    globalThis.crypto.getRandomValues(bytes);
+
+    // UUID v4 bits
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+    const hex = [...bytes].map((b) => b.toString(16).padStart(2, '0'));
+    return (
+      hex.slice(0, 4).join('') +
+      '-' +
+      hex.slice(4, 6).join('') +
+      '-' +
+      hex.slice(6, 8).join('') +
+      '-' +
+      hex.slice(8, 10).join('') +
+      '-' +
+      hex.slice(10, 16).join('')
+    );
+  }
+
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+
 function LinksBar({ links, t, lang }) {
   if (!links || (!links.logsPdf && !links.rosterPdf)) return null;
 
@@ -174,9 +207,10 @@ export default function ChatPage() {
     };
   }, [lang]);
 
-  const [messages, setMessages] = useState(() => [
-    { id: crypto.randomUUID(), from: 'bot', text: '' },
-  ]);
+const [messages, setMessages] = useState(() => [
+  { id: makeId(), from: 'bot', text: '' },
+]);
+
 
   // ✅ cuando cambie el idioma, actualiza el mensaje de bienvenida (solo si es el primer mensaje)
   useEffect(() => {
@@ -229,7 +263,7 @@ export default function ChatPage() {
   }, [messages, loading]);
 
   const pushBotError = (text) =>
-    setMessages((prev) => [...prev, { id: crypto.randomUUID(), from: 'bot', text }]);
+  setMessages((prev) => [...prev, { id: makeId(), from: 'bot', text }]);
 
   const toggleExpanded = (id) => {
     setMessages((prev) =>
@@ -243,7 +277,7 @@ export default function ChatPage() {
 
     setMessages((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), from: 'user', text: trimmed },
+     { id: makeId(), from: 'user', text: trimmed },
     ]);
     setLoading(true);
 
@@ -255,7 +289,7 @@ export default function ChatPage() {
         setMessages((prev) => [
           ...prev,
           {
-            id: crypto.randomUUID(),
+            id: makeId(),
             from: 'bot',
             text: data.answer,
             expanded: false,
