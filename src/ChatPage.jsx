@@ -1,151 +1,29 @@
-// src/ChatPage.jsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { sendChatMessage } from './api';
 
-const THEME_KEY = 'log_assistant_theme'; // 'dark' | 'light'
-const LANG_KEY = 'log_assistant_lang';   // 'en' | 'es'  ✅ NUEVO
+import logoAvatar from './assets/logo_avatar.png';
+import logoWatermark from './assets/logo_watermark.png';
 
-function isLongText(text, threshold = 260) {
-  return (text || '').length > threshold;
-}
+import { makeTheme } from './chat/theme';
+import s from './chat/styles';
 
-function clampStyle(lines) {
-  return {
-    display: '-webkit-box',
-    WebkitLineClamp: lines,
-    WebkitBoxOrient: 'vertical',
-    overflow: 'hidden',
-  };
-}
+import {
+  makeId,
+  readStoredName,
+  isLongText,
+  clampStyle,
+  getInitials,
+} from './chat/utils';
 
-function splitLines(text) {
-  return String(text || '')
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean);
-}
+import BotPrettyAnswer from './chat/components/BotPrettyAnswer';
+import LinksBar from './chat/components/LinksBar';
+import MiniChart from './chat/components/MiniChart';
+import NameModal from './chat/components/NameModal';
 
-function classifyLine(line) {
-  const s = line.toLowerCase();
-
-  // alertas / negativo
-  if (/(baj[oó]|cay[oó]|drop|dropped|problem|rechaz|error|riesgo|alerta)/i.test(s)) {
-    return { icon: '⚠️', tone: 'warn' };
-  }
-
-  // bajando
-  if (/(↓|disminuy|menor|baja|decrec)/i.test(s)) {
-    return { icon: '📉', tone: 'down' };
-  }
-
-  // positivo
-  if (/(subi[oó]|creci[oó]|mejor|top|lider|aument|↑|ganad|converted|confirmed)/i.test(s)) {
-    return { icon: '✅', tone: 'good' };
-  }
-
-  return { icon: '•', tone: 'neutral' };
-}
-
-function makeId() {
-  // Preferido: crypto.randomUUID (si existe)
-  if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
-    return globalThis.crypto.randomUUID();
-  }
-
-  // Fallback: crypto.getRandomValues (si existe) -> UUID v4
-  if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === 'function') {
-    const bytes = new Uint8Array(16);
-    globalThis.crypto.getRandomValues(bytes);
-
-    // UUID v4 bits
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-
-    const hex = [...bytes].map((b) => b.toString(16).padStart(2, '0'));
-    return (
-      hex.slice(0, 4).join('') +
-      '-' +
-      hex.slice(4, 6).join('') +
-      '-' +
-      hex.slice(6, 8).join('') +
-      '-' +
-      hex.slice(8, 10).join('') +
-      '-' +
-      hex.slice(10, 16).join('')
-    );
-  }
-
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-
-function LinksBar({ links, t, lang }) {
-  if (!links || (!links.logsPdf && !links.rosterPdf)) return null;
-
-  const labelLogs = lang === 'es' ? 'Logs PDF' : 'PDF Logs';
-  const labelRoster = lang === 'es' ? 'Roster PDF' : 'PDF Roster';
-
-  return (
-    <div style={s.linksWrap(t)}>
-      {links.logsPdf && (
-        <a
-          href={links.logsPdf}
-          target="_blank"
-          rel="noreferrer"
-          style={s.linkBtn(t)}
-          title={links.logsPdf}
-        >
-          📄 {labelLogs}
-        </a>
-      )}
-
-      {links.rosterPdf && (
-        <a
-          href={links.rosterPdf}
-          target="_blank"
-          rel="noreferrer"
-          style={s.linkBtn(t)}
-          title={links.rosterPdf}
-        >
-          📄 {labelRoster}
-        </a>
-      )}
-    </div>
-  );
-}
-
-function BotPrettyAnswer({ text, t, lang }) {
-  const lines = splitLines(text);
-
-  const bulletLines = lines
-    .map((l) => l.replace(/^[-•]\s*/, '').trim())
-    .filter((l) => l.length > 0);
-
-  const looksLikeBullets =
-    lines.length >= 2 && lines.filter((l) => /^[-•]\s+/.test(l)).length >= 2;
-
-  if (!looksLikeBullets) {
-    return <div style={{ whiteSpace: 'pre-wrap' }}>{text}</div>;
-  }
-
-  return (
-    <div style={s.botAnswerWrap(t)}>
-      <div style={s.botAnswerHeader(t)}>{lang === 'es' ? 'Resumen' : 'Summary'}</div>
-
-      <div style={s.botAnswerList(t)}>
-        {bulletLines.map((line, idx) => {
-          const { icon, tone } = classifyLine(line);
-          return (
-            <div key={idx} style={s.botAnswerItem(t, tone)}>
-              <div style={s.botAnswerIcon(t, tone)}>{icon}</div>
-              <div style={s.botAnswerText(t)}>{line}</div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+const THEME_KEY = 'log_assistant_theme';
+const LANG_KEY = 'log_assistant_lang';
+const CLIENT_ID_KEY = 'log_assistant_client_id';
+const USER_NAME_KEY = 'log_assistant_user_name';
 
 export default function ChatPage() {
   const [theme, setTheme] = useState(() => {
@@ -153,15 +31,32 @@ export default function ChatPage() {
     return saved === 'light' ? 'light' : 'dark';
   });
 
-  // ✅ Default inglés
   const [lang, setLang] = useState(() => {
     const saved = localStorage.getItem(LANG_KEY);
     return saved === 'es' ? 'es' : 'en';
   });
 
+  const [clientId] = useState(() => {
+    const saved = localStorage.getItem(CLIENT_ID_KEY);
+    if (saved) return saved;
+    const id = makeId();
+    localStorage.setItem(CLIENT_ID_KEY, id);
+    return id;
+  });
+
+  const [userName, setUserName] = useState(() => readStoredName(USER_NAME_KEY));
+  const [askNameOpen, setAskNameOpen] = useState(() => !readStoredName(USER_NAME_KEY));
+
+  useEffect(() => {
+    const n = readStoredName(USER_NAME_KEY);
+    if (!n && localStorage.getItem(USER_NAME_KEY) !== null) {
+      localStorage.removeItem(USER_NAME_KEY);
+    }
+    if (!n) setAskNameOpen(true);
+  }, []);
+
   const t = useMemo(() => makeTheme(theme), [theme]);
 
-  // ✅ textos UI por idioma
   const ui = useMemo(() => {
     if (lang === 'es') {
       return {
@@ -170,14 +65,6 @@ export default function ChatPage() {
           'Pregúntame por leads, dropped, problem y crédito (convertedValue).',
         placeholder: 'Escribe aquí…',
         online: 'Online',
-        prompts: [
-          'Confirmados (mes)',
-          'Mejor confirmación (año)',
-          'Dropped últimos 3 meses',
-          'Resumen (semana)',
-          'Crédito (mes)',
-          'Dropped hoy (oficina)',
-        ],
         more: 'Ver más',
         less: 'Ver menos',
         typing: 'Escribiendo…',
@@ -191,14 +78,6 @@ export default function ChatPage() {
         'Ask me about leads, dropped, problem, and credit (convertedValue).',
       placeholder: 'Type here…',
       online: 'Online',
-      prompts: [
-        'Confirmed (month)',
-        'Best confirmation (year)',
-        'Dropped last 3 months',
-        'Summary (week)',
-        'Credit (month)',
-        'Dropped today (office)',
-      ],
       more: 'Show more',
       less: 'Show less',
       typing: 'Typing…',
@@ -207,54 +86,56 @@ export default function ChatPage() {
     };
   }, [lang]);
 
-const [messages, setMessages] = useState(() => [
-  { id: makeId(), from: 'bot', text: '' },
-]);
+  const [messages, setMessages] = useState(() => [
+    { id: makeId(), from: 'bot', text: ui.welcome },
+  ]);
 
-
-  // ✅ cuando cambie el idioma, actualiza el mensaje de bienvenida (solo si es el primer mensaje)
   useEffect(() => {
     setMessages((prev) => {
       if (!Array.isArray(prev) || prev.length === 0) return prev;
       const first = prev[0];
-      if (first?.from === 'bot') {
-        const rest = prev.slice(1);
-        return [{ ...first, text: ui.welcome }, ...rest];
-      }
+      if (first?.from === 'bot') return [{ ...first, text: ui.welcome }, ...prev.slice(1)];
       return prev;
     });
   }, [ui.welcome]);
 
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-
   const listRef = useRef(null);
 
-  // =========================
-  // Quick prompts
-  // =========================
   const [showAllPrompts, setShowAllPrompts] = useState(false);
 
-  const quickPrompts = useMemo(
-    () => ui.prompts.map((label) => ({ label })),
-    [ui.prompts]
-  );
-
-  const visiblePrompts = useMemo(() => {
-    const base = showAllPrompts ? quickPrompts : quickPrompts.slice(0, 4);
+const quickPrompts = useMemo(() => {
+  if (lang === 'es') {
     return [
-      ...base,
-      { label: showAllPrompts ? ui.less : ui.more, __toggle: true },
+      { label: 'Confirmados (mes)', preset: 'confirmed_month' },
+      { label: 'Mejor confirmación (año)', preset: 'best_confirmation_year' },
+      { label: 'Dropped últimos 3 meses', preset: 'dropped_last_3_months' },
+      { label: 'Resumen (semana)', preset: 'summary_week' },
+      { label: 'Crédito (mes)', preset: 'credit_month' },
+      { label: 'Dropped hoy (oficina)', preset: 'dropped_today_office' },
+      { label: 'Cambiar mi nombre', preset: 'change_name' },
     ];
-  }, [quickPrompts, showAllPrompts, ui.more, ui.less]);
+  }
 
-  useEffect(() => {
-    localStorage.setItem(THEME_KEY, theme);
-  }, [theme]);
+  return [
+    { label: 'Confirmed (month)', preset: 'confirmed_month' },
+    { label: 'Best confirmation (year)', preset: 'best_confirmation_year' },
+    { label: 'Dropped last 3 months', preset: 'dropped_last_3_months' },
+    { label: 'Summary (week)', preset: 'summary_week' },
+    { label: 'Credit (month)', preset: 'credit_month' },
+    { label: 'Dropped today (office)', preset: 'dropped_today_office' },
+  ];
+}, [lang]);
 
-  useEffect(() => {
-    localStorage.setItem(LANG_KEY, lang);
-  }, [lang]);
+const visiblePrompts = useMemo(() => {
+  const base = showAllPrompts ? quickPrompts : quickPrompts.slice(0, 4);
+  return [...base, { label: showAllPrompts ? ui.less : ui.more, __toggle: true }];
+}, [quickPrompts, showAllPrompts, ui.more, ui.less]);
+
+
+  useEffect(() => localStorage.setItem(THEME_KEY, theme), [theme]);
+  useEffect(() => localStorage.setItem(LANG_KEY, lang), [lang]);
 
   useEffect(() => {
     const el = listRef.current;
@@ -263,27 +144,45 @@ const [messages, setMessages] = useState(() => [
   }, [messages, loading]);
 
   const pushBotError = (text) =>
-  setMessages((prev) => [...prev, { id: makeId(), from: 'bot', text }]);
+    setMessages((prev) => [...prev, { id: makeId(), from: 'bot', text }]);
 
   const toggleExpanded = (id) => {
-    setMessages((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, expanded: !m.expanded } : m))
-    );
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, expanded: !m.expanded } : m)));
   };
 
-  const handleSendText = async (text) => {
-    const trimmed = (text || '').trim();
-    if (!trimmed || loading) return;
+  const saveUserName = (name) => {
+    const n = String(name || '').trim();
+    if (!n) return;
+    localStorage.setItem(USER_NAME_KEY, n);
+    setUserName(n);
+    setAskNameOpen(false);
 
     setMessages((prev) => [
       ...prev,
-     { id: makeId(), from: 'user', text: trimmed },
+      {
+        id: makeId(),
+        from: 'bot',
+        text: lang === 'es'
+          ? `Perfecto, ${n}. ¿Qué quieres revisar hoy?`
+          : `Perfect, ${n}. What do you want to review today?`,
+      },
     ]);
+  };
+
+  const handleSendText = async (text, options = {}) => {
+    const trimmed = (text || '').trim();
+    if (!trimmed || loading) return;
+
+    if (/^cambiar mi nombre$/i.test(trimmed) || /^change my name$/i.test(trimmed)) {
+      setAskNameOpen(true);
+      return;
+    }
+
+    setMessages((prev) => [...prev, { id: makeId(), from: 'user', text: trimmed }]);
     setLoading(true);
 
     try {
-      // ✅ manda lang al backend
-      const data = await sendChatMessage(trimmed, lang);
+      const data = await sendChatMessage(trimmed, lang, clientId, userName, options?.preset);
 
       if (data?.ok) {
         setMessages((prev) => [
@@ -293,7 +192,7 @@ const [messages, setMessages] = useState(() => [
             from: 'bot',
             text: data.answer,
             expanded: false,
-            meta: { rowCount: data.rowCount, links: data.links || null },
+            meta: { rowCount: data.rowCount, links: data.links || null, chart: data.chart || null },
           },
         ]);
       } else {
@@ -314,15 +213,21 @@ const [messages, setMessages] = useState(() => [
   };
 
   const onQuick = (item) => {
-    if (loading) return;
+  if (loading) return;
 
-    if (item.__toggle) {
-      setShowAllPrompts((v) => !v);
-      return;
-    }
+  if (item.__toggle) {
+    setShowAllPrompts((v) => !v);
+    return;
+  }
 
-    handleSendText(item.label);
-  };
+  if (item.preset === 'change_name') {
+    setAskNameOpen(true);
+    return;
+  }
+
+  handleSendText(item.label, { preset: item.preset });
+};
+
 
   return (
     <>
@@ -339,11 +244,16 @@ const [messages, setMessages] = useState(() => [
 
       <div style={s.page(t)}>
         <header style={s.header(t)}>
+          <img src={logoWatermark} alt="" aria-hidden="true" style={s.headerWatermark(t)} />
+
           <div style={s.headerLeft}>
-            <div style={s.avatar(t)}>B</div>
+            <div style={s.avatar(t)}>
+              <img src={logoAvatar} alt="305 No Fault" style={s.avatarLogo} />
+            </div>
+
             <div style={{ lineHeight: 1.05, minWidth: 0 }}>
-              <div style={s.title(t)}>Log Assistant</div>
-              <div style={s.subTitle(t)}>305 No Fault</div>
+              <div style={s.title(t)}>Nexus Assistant</div>
+              <div style={s.subTitle(t)}>305 No Fault{userName ? ` · ${userName}` : ''}</div>
             </div>
           </div>
 
@@ -353,12 +263,10 @@ const [messages, setMessages] = useState(() => [
               <span style={s.pillText(t)}>{ui.online}</span>
             </div>
 
-            {/* ✅ Toggle idioma */}
             <button
               type="button"
               onClick={() => setLang((x) => (x === 'en' ? 'es' : 'en'))}
               style={s.langBtn(t)}
-              aria-label="Change language"
               title={lang === 'en' ? 'Español' : 'English'}
             >
               {lang === 'en' ? 'EN' : 'ES'}
@@ -368,7 +276,6 @@ const [messages, setMessages] = useState(() => [
               type="button"
               onClick={() => setTheme((x) => (x === 'dark' ? 'light' : 'dark'))}
               style={s.themeBtn(t)}
-              aria-label="Cambiar tema"
               title={theme === 'dark' ? 'Modo día' : 'Modo noche'}
             >
               {theme === 'dark' ? '☀️' : '🌙'}
@@ -384,42 +291,47 @@ const [messages, setMessages] = useState(() => [
 
             return (
               <div key={m.id} style={isUser ? s.rowUser : s.rowBot}>
-                {!isUser && <div style={s.bubbleAvatar(t)}>B</div>}
+                {!isUser && (
+                  <div style={s.bubbleAvatar(t)}>
+                    <img src={logoAvatar} alt="Nexus" style={s.bubbleLogo} />
+                  </div>
+                )}
 
                 <div style={isUser ? s.bubbleUser(t) : s.bubbleBot(t)}>
                   <div style={s.messageText(t, isUser)}>
-                    {!isUser && long && !expanded ? (
-                      <div style={clampStyle(4)}>{m.text}</div>
-                   ) : !isUser ? (
+                    {!isUser ? (
                       <>
-                        <BotPrettyAnswer text={m.text} t={t} lang={lang} />
+                        {long && !expanded ? (
+                          <div style={clampStyle(4)}>{m.text}</div>
+                        ) : (
+                          <BotPrettyAnswer text={m.text} t={t} lang={lang} />
+                        )}
+
                         <LinksBar links={m?.meta?.links} t={t} lang={lang} />
+                        <MiniChart chart={m?.meta?.chart} t={t} lang={lang} />
                       </>
                     ) : (
-
                       <div style={{ whiteSpace: 'pre-wrap' }}>{m.text}</div>
                     )}
                   </div>
 
                   {!isUser && long && (
-                    <button
-                      type="button"
-                      onClick={() => toggleExpanded(m.id)}
-                      style={s.moreBtn(t)}
-                    >
+                    <button type="button" onClick={() => toggleExpanded(m.id)} style={s.moreBtn(t)}>
                       {expanded ? ui.less : ui.more}
                     </button>
                   )}
                 </div>
 
-                {isUser && <div style={s.bubbleAvatarUser(t)}>You</div>}
+                {isUser && <div style={s.bubbleAvatarUser(t)}>{getInitials(userName)}</div>}
               </div>
             );
           })}
 
           {loading && (
             <div style={s.rowBot}>
-              <div style={s.bubbleAvatar(t)}>B</div>
+              <div style={s.bubbleAvatar(t)}>
+                <img src={logoAvatar} alt="Nexus" style={s.bubbleLogo} />
+              </div>
               <div style={s.bubbleBot(t)}>
                 <span style={{ opacity: 0.9 }}>{ui.typing}</span>
               </div>
@@ -429,22 +341,22 @@ const [messages, setMessages] = useState(() => [
           <div style={{ height: 10 }} />
         </main>
 
-        <div style={s.suggestWrap(t)}>
-          <div style={s.suggestScroll}>
-            {visiblePrompts.map((item) => (
-              <button
-                key={item.label}
-                type="button"
-                onClick={() => onQuick(item)}
-                style={s.suggestChip(t, !!item.__toggle)}
-                disabled={loading}
-                title={item.label}
-              >
-                ✨ {item.label}
-              </button>
-            ))}
+          <div style={s.suggestWrap(t)}>
+            <div style={s.suggestScroll}>
+              {visiblePrompts.map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => onQuick(item)}
+                  style={s.suggestChip(t, !!item.__toggle)}
+                  disabled={loading}
+                  title={item.label}
+                >
+                  ✨ {item.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
 
         <form onSubmit={onSubmit} style={s.composer(t)}>
           <div style={s.inputWrap(t)}>
@@ -465,7 +377,6 @@ const [messages, setMessages] = useState(() => [
                 opacity: loading || !input.trim() ? 0.55 : 1,
                 cursor: loading || !input.trim() ? 'not-allowed' : 'pointer',
               }}
-              aria-label="Send"
               title="Send"
             >
               ➤
@@ -473,368 +384,10 @@ const [messages, setMessages] = useState(() => [
           </div>
         </form>
       </div>
+
+      {askNameOpen && (
+        <NameModal t={t} lang={lang} onSave={saveUserName} onSkip={() => setAskNameOpen(false)} />
+      )}
     </>
   );
 }
-
-function makeTheme(mode) {
-  const dark = mode === 'dark';
-  return {
-    mode,
-    bg: dark ? '#0b1220' : '#f5f7fb',
-    headerBg: dark ? '#0f172a' : '#ffffff',
-    surface: dark ? '#111827' : '#ffffff',
-    surface2: dark ? '#0b1220' : '#eef2ff',
-    border: dark ? 'rgba(255,255,255,0.18)' : 'rgba(15,23,42,0.12)',
-    text: dark ? '#f8fafc' : '#0f172a',
-    textMuted: dark ? '#cbd5e1' : '#475569',
-    bubbleBotBg: dark ? '#111827' : '#ffffff',
-    bubbleBotBorder: dark ? 'rgba(255,255,255,0.16)' : 'rgba(15,23,42,0.10)',
-    bubbleUserBg: dark ? '#2563eb' : '#0f62fe',
-    chipBg: dark ? '#111827' : '#ffffff',
-    chipBorder: dark ? 'rgba(255,255,255,0.18)' : 'rgba(15,23,42,0.12)',
-    blue: '#0f62fe',
-  };
-}
-
-const s = {
-  page: (t) => ({
-    height: '100dvh',
-    width: '100vw',
-    minWidth: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    background: t.bg,
-    color: t.text,
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
-    paddingTop: 'env(safe-area-inset-top)',
-    WebkitFontSmoothing: 'antialiased',
-    MozOsxFontSmoothing: 'grayscale',
-  }),
-
-  header: (t) => ({
-    height: 56,
-    padding: '10px 12px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    background: t.headerBg,
-    borderBottom: `1px solid ${t.border}`,
-    flexShrink: 0,
-  }),
-
-  headerLeft: { display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 },
-  headerRight: { display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 },
-
-  avatar: (t) => ({
-    width: 36,
-    height: 36,
-    borderRadius: 999,
-    background: t.mode === 'dark' ? '#0b1220' : '#0f172a',
-    color: '#fff',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 900,
-    flexShrink: 0,
-  }),
-
-  title: (t) => ({ fontSize: 14, fontWeight: 900, color: t.text }),
-  subTitle: (t) => ({ fontSize: 12, color: t.textMuted }),
-
-  pill: (t) => ({
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    padding: '6px 10px',
-    borderRadius: 999,
-    border: `1px solid ${t.border}`,
-    background: t.surface2,
-  }),
-
-  dotOnline: { width: 8, height: 8, borderRadius: 999, background: '#22c55e' },
-  pillText: (t) => ({ fontSize: 12, color: t.textMuted, fontWeight: 800 }),
-
-  // ✅ botón idioma
-  langBtn: (t) => ({
-    height: 36,
-    padding: '0 12px',
-    borderRadius: 999,
-    border: `1px solid ${t.border}`,
-    background: t.surface2,
-    color: t.text,
-    cursor: 'pointer',
-    fontSize: 12,
-    fontWeight: 900,
-    letterSpacing: 0.2,
-  }),
-
-  themeBtn: (t) => ({
-    width: 36,
-    height: 36,
-    borderRadius: 999,
-    border: `1px solid ${t.border}`,
-    background: t.surface2,
-    color: t.text,
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 16,
-  }),
-
-  list: (t) => ({
-    flex: 1,
-    minHeight: 0,
-    overflowY: 'auto',
-    padding: '12px 10px',
-    background: t.mode === 'dark' ? '#0b1220' : '#f5f7fb',
-  }),
-
-  rowBot: { display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 10 },
-  rowUser: {
-    display: 'flex',
-    gap: 8,
-    alignItems: 'flex-end',
-    justifyContent: 'flex-end',
-    marginBottom: 10,
-  },
-
-  bubbleAvatar: (t) => ({
-    width: 28,
-    height: 28,
-    borderRadius: 999,
-    background: t.mode === 'dark' ? '#0b1220' : '#0f172a',
-    color: '#fff',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 12,
-    fontWeight: 900,
-    flexShrink: 0,
-  }),
-
-  bubbleAvatarUser: () => ({
-    width: 28,
-    height: 28,
-    borderRadius: 999,
-    background: '#facc15',
-    color: '#4a3410',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 11,
-    fontWeight: 900,
-    flexShrink: 0,
-  }),
-
-  bubbleBot: (t) => ({
-    maxWidth: '78%',
-    background: t.bubbleBotBg,
-    border: `1px solid ${t.bubbleBotBorder}`,
-    borderRadius: 18,
-    padding: '12px 12px',
-  }),
-
-  bubbleUser: (t) => ({
-    maxWidth: '78%',
-    background: t.bubbleUserBg,
-    color: '#fff',
-    borderRadius: 18,
-    padding: '12px 12px',
-  }),
-
-  messageText: (t, isUser) => ({
-    fontSize: 16,
-    lineHeight: 1.45,
-    fontWeight: 600,
-    color: isUser ? '#ffffff' : t.text,
-  }),
-
-  moreBtn: (t) => ({
-    marginTop: 10,
-    padding: '7px 12px',
-    borderRadius: 999,
-    border: `1px solid ${t.border}`,
-    background: t.surface2,
-    color: t.text,
-    fontSize: 12,
-    fontWeight: 900,
-    cursor: 'pointer',
-  }),
-
-  suggestWrap: (t) => ({
-    padding: '10px 10px 8px',
-    borderTop: `1px solid ${t.border}`,
-    background: t.mode === 'dark' ? t.headerBg : '#ffffff',
-    flexShrink: 0,
-  }),
-
-  suggestScroll: {
-    display: 'flex',
-    gap: 10,
-    overflowX: 'auto',
-    WebkitOverflowScrolling: 'touch',
-    paddingBottom: 2,
-    paddingRight: 6,
-  },
-
-  suggestChip: (t, isToggle) => ({
-    flex: '0 0 auto',
-    borderRadius: 999,
-    border: `1px solid ${t.chipBorder}`,
-    padding: '9px 12px',
-    background: isToggle
-      ? t.mode === 'dark'
-        ? 'rgba(250,204,21,0.12)'
-        : 'rgba(15,98,254,0.10)'
-      : t.mode === 'dark'
-      ? t.chipBg
-      : '#f1f5f9',
-    color: t.text,
-    cursor: 'pointer',
-    textAlign: 'left',
-    fontSize: 12,
-    fontWeight: 900,
-    whiteSpace: 'nowrap',
-  }),
-
-  composer: (t) => ({
-    padding: '10px 10px calc(10px + env(safe-area-inset-bottom))',
-    background: t.bg,
-    flexShrink: 0,
-  }),
-
-  inputWrap: (t) => ({
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    background: t.mode === 'dark' ? '#0f172a' : '#ffffff',
-    border: `2px solid ${
-      t.mode === 'dark' ? 'rgba(255,255,255,0.18)' : 'rgba(15,23,42,0.16)'
-    }`,
-    borderRadius: 999,
-    padding: '10px 10px 10px 14px',
-    boxShadow:
-      t.mode === 'dark'
-        ? '0 10px 30px rgba(0,0,0,0.35)'
-        : '0 10px 25px rgba(15,23,42,0.08)',
-  }),
-
-  input: (t) => ({
-    flex: 1,
-    minWidth: 0,
-    border: 'none',
-    outline: 'none',
-    background: 'transparent',
-    color: t.text,
-    fontSize: 16,
-    fontWeight: 600,
-  }),
-
-  send: (t) => ({
-    width: 40,
-    height: 40,
-    borderRadius: 999,
-    border: 'none',
-    background: t.blue,
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 900,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  }),
-
-  botAnswerWrap: (t) => ({ display: 'flex', flexDirection: 'column', gap: 8 }),
-  botAnswerHeader: (t) => ({
-    fontSize: 12,
-    fontWeight: 900,
-    color: t.textMuted,
-    letterSpacing: 0.2,
-  }),
-  botAnswerList: () => ({ display: 'flex', flexDirection: 'column', gap: 8 }),
-
-  botAnswerItem: (t, tone) => ({
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: 10,
-    padding: '10px 10px',
-    borderRadius: 14,
-    border: `1px solid ${
-      t.mode === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(15,23,42,0.10)'
-    }`,
-    background:
-      tone === 'good'
-        ? t.mode === 'dark'
-          ? 'rgba(34,197,94,0.12)'
-          : 'rgba(34,197,94,0.10)'
-        : tone === 'warn'
-        ? t.mode === 'dark'
-          ? 'rgba(250,204,21,0.12)'
-          : 'rgba(250,204,21,0.14)'
-        : tone === 'down'
-        ? t.mode === 'dark'
-          ? 'rgba(59,130,246,0.10)'
-          : 'rgba(59,130,246,0.10)'
-        : t.mode === 'dark'
-        ? 'rgba(255,255,255,0.04)'
-        : 'rgba(15,23,42,0.03)',
-  }),
-
-  botAnswerIcon: (t, tone) => ({
-    width: 26,
-    height: 26,
-    borderRadius: 999,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    fontSize: 14,
-    background:
-      tone === 'good'
-        ? 'rgba(34,197,94,0.18)'
-        : tone === 'warn'
-        ? 'rgba(250,204,21,0.22)'
-        : tone === 'down'
-        ? 'rgba(59,130,246,0.18)'
-        : t.mode === 'dark'
-        ? 'rgba(255,255,255,0.08)'
-        : 'rgba(15,23,42,0.08)',
-  }),
-
-  botAnswerText: (t) => ({
-    fontSize: 14,
-    fontWeight: 700,
-    lineHeight: 1.35,
-    color: t.text,
-  }),
-
-  // ✅ Links PDF
-  linksWrap: (t) => ({
-    display: 'flex',
-    gap: 10,
-    flexWrap: 'wrap',
-    marginTop: 10,
-  }),
-
-  linkBtn: (t) => ({
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 8,
-    padding: '8px 12px',
-    borderRadius: 999,
-    border: `1px solid ${t.border}`,
-    background: t.surface2,
-    color: t.text,
-    fontSize: 12,
-    fontWeight: 900,
-    textDecoration: 'none',
-    cursor: 'pointer',
-  }),
-};
-
-
-
-
-
