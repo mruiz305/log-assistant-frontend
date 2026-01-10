@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 function NameModal({ t, lang, onSave, onSkip }) {
   const [name, setName] = useState('');
 
