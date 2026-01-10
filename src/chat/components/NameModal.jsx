@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import s from './chat/styles';
 
 function NameModal({ t, lang, onSave, onSkip }) {
   const [name, setName] = useState('');
