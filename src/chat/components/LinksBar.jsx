@@ -1,3 +1,5 @@
+
+import s from '../styles';
 function LinksBar({ links, t, lang }) {
   if (!links || (!links.logsPdf && !links.rosterPdf)) return null;
 
