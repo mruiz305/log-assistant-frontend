@@ -345,7 +345,16 @@ const S = {
   },
 
   topRow: { display: "flex", gap: 12, alignItems: "center", marginBottom: 14 },
-  smallLogo: { width: 44, height: 44, borderRadius: 12, objectFit: "cover", border: "1px solid #e2e8f0" },
+  smallLogo: {
+  width: 44,
+  height: 44,
+  borderRadius: 12,
+  objectFit: "contain",          
+  background: "#fff",           
+  padding: 6,                   
+  boxSizing: "border-box",
+  border: "1px solid #e2e8f0",
+},
 
   title: { fontSize: 18, fontWeight: 900, lineHeight: 1.1 },
   subtitle: { fontSize: 12, marginTop: 2 },
@@ -411,7 +420,16 @@ const S = {
 
   footerHint: { marginTop: 12, fontSize: 11, lineHeight: 1.3 },
 
-  bigLogo: { width: 86, height: 86, borderRadius: 18, objectFit: "cover", border: "1px solid #e2e8f0" },
-  leftTitle: { marginTop: 14, fontSize: 26, fontWeight: 1000 },
+  bigLogo: {
+  width: 86,
+  height: 86,
+  borderRadius: 18,
+  objectFit: "contain",          
+  background: "#fff",
+  padding: 10,
+  boxSizing: "border-box",
+  border: "1px solid #e2e8f0",
+},
+leftTitle: { marginTop: 14, fontSize: 26, fontWeight: 1000 },
   leftSub: { marginTop: 6, fontSize: 13, lineHeight: 1.4 },
 };
