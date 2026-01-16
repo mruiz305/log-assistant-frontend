@@ -399,6 +399,8 @@ bubbleLogo: {
 
   modalCard: (t) => ({
     width: 'min(420px, 92vw)',
+    maxWidth: '92vw',          // ✅ extra safety
+    boxSizing: 'border-box',   // ✅ CLAVE
     borderRadius: 18,
     background: t.surface,
     border: `1px solid ${t.border}`,
@@ -407,6 +409,7 @@ bubbleLogo: {
         ? '0 25px 60px rgba(0,0,0,0.60)'
         : '0 25px 60px rgba(15,23,42,0.18)',
     padding: 16,
+    overflow: 'hidden',        
   }),
 
   modalTitle: (t) => ({
@@ -426,6 +429,8 @@ bubbleLogo: {
 
   modalInput: (t) => ({
     width: '100%',
+    maxWidth: '100%',          // ✅ extra safety
+    boxSizing: 'border-box',   // ✅ CLAVE
     borderRadius: 12,
     border: `1px solid ${t.border}`,
     padding: '12px 12px',
@@ -441,7 +446,9 @@ bubbleLogo: {
     justifyContent: 'flex-end',
     gap: 10,
     marginTop: 12,
+    flexWrap: 'wrap',     
   },
+
 
   modalBtnGhost: (t) => ({
     height: 38,
