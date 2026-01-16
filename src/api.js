@@ -1,11 +1,11 @@
-import axios from 'axios';
-import { auth } from './firebase'; 
+import axios from "axios";
+import { auth } from "./firebase";
 
-const BASE_URL =
-  (import.meta.env?.VITE_API_BASE_URL || '').trim() ||
-  `${window.location.protocol}//${window.location.hostname}:4000`;
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").trim();
+if (!BASE_URL) throw new Error("Missing VITE_API_BASE_URL");
 
 const api = axios.create({ baseURL: BASE_URL });
+
 
 export async function resolveUserNameByEmail(email) {
   const user = auth.currentUser;
