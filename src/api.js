@@ -3,6 +3,7 @@ import { auth } from "./firebase";
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").trim();
 if (!BASE_URL) throw new Error("Missing VITE_API_BASE_URL");
+console.log("VITE_API_BASE_URL =", import.meta.env.VITE_API_BASE_URL);
 
 const api = axios.create({ baseURL: BASE_URL });
 
@@ -38,6 +39,23 @@ export async function fetchWeeklyDashboard(lang = "en") {
 
   return res.data;
 }
+
+export async function fetchMonthlyDashboard(lang = "en") {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Not authenticated");
+
+  const token = await user.getIdToken();
+
+  const res = await api.get("/api/dashboard/summary/month", {
+    params: { lang },
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  return res.data;
+}
+
 
 export async function sendChatMessage(
   message,

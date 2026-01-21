@@ -11,7 +11,7 @@ import MiniChart from "../chat/components/MiniChart";
 import { auth } from "../firebase";
 import { signOut } from "firebase/auth";
 import { resolveUserNameByEmail } from "../api";
-import { fetchWeeklyDashboard } from "../api";
+import { fetchMonthlyDashboard } from "../api";
 
 const THEME_KEY = "log_assistant_theme";
 const LANG_KEY = "log_assistant_lang";
@@ -27,10 +27,10 @@ function readStoredName(key) {
   return String(raw || "").trim();
 }
 
-/** Extrae métricas desde el texto del summary (sin tocar backend). */
+/** Extrae métricas desde el texto del summary (fallback, sin tocar backend). */
 function parseKpisFromSummary(text = "") {
   const raw = String(text || "");
-  const t = raw.replace(/\s+/g, " ").trim(); // normaliza espacios para regex
+  const t = raw.replace(/\s+/g, " ").trim();
 
   const pick = (re) => {
     const m = t.match(re);
@@ -46,11 +46,10 @@ function parseKpisFromSummary(text = "") {
     return Number.isFinite(n) ? n : null;
   };
 
-  // ✅ TOTAL: soporta "last 7 days: 964 gross cases" y "total 964 gross cases"
   const total =
     pick(/last\s+\d+\s+days:\s*([\d,]+)\s+gross\s+cases/i) ??
     pick(/total\s+([\d,]+)\s+gross\s+cases/i) ??
-    pick(/([\d,]+)\s+gross\s+cases/i); // fallback (primer match)
+    pick(/([\d,]+)\s+gross\s+cases/i);
 
   const confirmed =
     pick(/with\s+([\d,]+)\s+confirmed/i) ??
@@ -60,24 +59,20 @@ function parseKpisFromSummary(text = "") {
     pickPct(/([\d.]+)\s*%\s*confirmation\s*rate/i) ??
     pickPct(/confirmation\s*rate\s*(?:is|=)?\s*([\d.]+)\s*%/i);
 
-  // ✅ DROPPED: soporta "19 cases dropped" y "Dropped cases ... 19 (1.97%)"
   const dropped =
     pick(/([\d,]+)\s+cases\s+dropped/i) ??
     pick(/dropped\s+cases?\s+(?:were|=|total(?:ed)?|low\s+at)?\s*([\d,]+)/i) ??
     pick(/dropped\s+cases?\s+.*?\s([\d,]+)/i);
 
-  // ✅ DROPPED RATE: soporta "1.97% dropped rate" y "(1.97%)" cerca de Dropped
   const droppedRate =
     pickPct(/([\d.]+)\s*%\s*dropped\s*rate/i) ??
     (() => {
-      // busca "(x.xx%)" cerca de la frase "Dropped"
       const m = t.match(/dropped[^.]{0,120}\(([\d.]+)\s*%\)/i);
       if (!m) return null;
       const n = Number(m[1]);
       return Number.isFinite(n) ? n : null;
     })();
 
-  // ✅ ACTIVE / REFEROUT: soporta "Active cases totaled 293; referout cases were 589."
   const active =
     pick(/active\s+cases?\s+(?:total(?:ed)?|were|=)\s*([\d,]+)/i) ??
     pick(/([\d,]+)\s+active\s+cases/i);
@@ -112,27 +107,64 @@ function fmt(n) {
   }
 }
 
+function fmtMoney(n) {
+  if (n === null || n === undefined) return "—";
+  const v = Number(n);
+  if (!Number.isFinite(v)) return "—";
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    }).format(v);
+  } catch {
+    return `$${fmt(v)}`;
+  }
+}
+
+function fmtPct(n) {
+  if (n === null || n === undefined) return "—";
+  return `${Number(n).toFixed(2)}%`;
+}
+
+/** Adapta chart del backend a MiniChart y fuerza colores de estados. */
 function adaptChartForMiniChart(chart) {
   if (!chart) return null;
 
-  // Caso dashboard: { title, data:[{label,value}] }
+  // ✅ Color map (según tu KEY)
+  const colorByLabel = (labelRaw) => {
+    const label = String(labelRaw || "").trim().toLowerCase();
+
+    if (label === "confirmed" || label === "good" || label.includes("good")) return "#00B050"; // verde
+    if (label === "dropped") return "#F4B183"; // naranja claro
+    if (label.includes("dropped >60") || label.includes("dropped>60")) return "#ED7D31"; // naranja fuerte
+    if (label === "problem") return "#E49EDD"; // rosado
+    if (label.includes("problem >30") || label.includes("problem>30")) return "#FFD966"; // amarillo
+
+    if (label === "active") return "#9CA3AF"; // gris
+    if (label.includes("refer")) return "#8AB4F8"; // azul suave
+
+    return null;
+  };
+
   if (Array.isArray(chart.data) && chart.data.length) {
-    const labels = chart.data.map(d => String(d.label));
-    const values = chart.data.map(d => Number(d.value) || 0);
+    const labels = chart.data.map((d) => String(d.label));
+    const values = chart.data.map((d) => Number(d.value) || 0);
 
     return {
-      kind: 'donut',              // 👈 CLAVE
-      title: chart.title || '',
+      kind: "donut",
+      title: chart.title || "",
       labels,
       values,
+      // ✅ MiniChart debe usar este array si lo soporta (si no, no rompe)
+      colors: labels.map((lab) => colorByLabel(lab) || undefined),
       center: {
-        label: 'Total',
+        label: "Total",
         value: values.reduce((a, b) => a + b, 0),
       },
     };
   }
 
-  // Caso chat (ya viene bien formado)
   return chart;
 }
 
@@ -141,22 +173,16 @@ function splitBullets(text = "") {
     .split("\n")
     .map((l) => l.trim())
     .filter(Boolean)
-    .map((l) => l.replace(/^[-•]\s*/, "")); // quita "- " o "• "
+    .map((l) => l.replace(/^[-•]\s*/, ""));
 }
 
-function pickIcon(line = "", lang = "es") {
+function pickIcon(line = "") {
   const s = line.toLowerCase();
-
   if (/(riesgo|risk|alerta|alert)/.test(s)) return "🔴";
   if (/(recom|accion|acción|next step|paso|implementar|revisar)/.test(s)) return "🎯";
   if (/(tasa|rate|%|confirm|confirmad|dropped|caid|caíd)/.test(s)) return "📊";
   if (/(problema|problem)/.test(s)) return "🟡";
   return "ℹ️";
-}
-
-function fmtPct(n) {
-  if (n === null || n === undefined) return "—";
-  return `${n.toFixed(2)}%`;
 }
 
 export default function DashboardPage() {
@@ -172,6 +198,7 @@ export default function DashboardPage() {
     return saved === "es" ? "es" : "en";
   });
 
+  // eslint-disable-next-line no-unused-vars
   const [clientId] = useState(() => {
     const saved = localStorage.getItem(CLIENT_ID_KEY);
     if (saved) return saved;
@@ -181,49 +208,59 @@ export default function DashboardPage() {
   });
 
   const [userName, setUserName] = useState(() => readStoredName(USER_NAME_KEY));
-
   const t = useMemo(() => makeTheme(theme), [theme]);
 
   const ui = useMemo(() => {
     if (lang === "es") {
       return {
         title: "Dashboard",
-        sub: `305 No Fault${userName ? ` · ${userName}` : ""} · Resumen (semana)`,
+        sub: `305 No Fault${userName ? ` · ${userName}` : ""} · Resumen (mes en curso)`,
         online: "Online",
         exec: "Executive summary",
         retry: "Retry",
         updated: "Updated",
         openChat: "Open chat",
-        kpiTitle: "Key metrics (7 days)",
+        kpiTitle: "Key metrics (mes en curso)",
+        top10Title: "Top 10 representantes (mes en curso)",
+        top10AttorneysTitle: "Top 10 abogados (mes en curso)",
+        chatCta: "Chat",
+        chatHint: "Pregúntale a Nexus",
+        repCol: "Representante",
+        attCol: "Abogado",
       };
     }
     return {
       title: "Dashboard",
-      sub: `305 No Fault${userName ? ` · ${userName}` : ""} · Auto summary (week)`,
+      sub: `305 No Fault${userName ? ` · ${userName}` : ""} · Auto summary (month-to-date)`,
       online: "Online",
       exec: "Executive summary",
       retry: "Retry",
       updated: "Updated",
       openChat: "Open chat",
-      kpiTitle: "Key metrics (7 days)",
+      kpiTitle: "Key metrics (month-to-date)",
+      top10Title: "Top 10 reps (month-to-date)",
+      top10AttorneysTitle: "Top 10 attorneys (month-to-date)",
+      chatCta: "Chat",
+      chatHint: "Ask Nexus",
+      repCol: "Rep",
+      attCol: "Attorney",
     };
   }, [lang, userName]);
 
   const [loading, setLoading] = useState(false);
- const [summary, setSummary] = useState("");
-const [chart, setChart] = useState(null);
+  const [summary, setSummary] = useState("");
+  const [chart, setChart] = useState(null);
 
+  const [kpiPack, setKpiPack] = useState(null);
+  const [updatedAt, setUpdatedAt] = useState(null);
 
-const [kpiPack, setKpiPack] = useState(null);
-const [updatedAt, setUpdatedAt] = useState(null);
-
-const [err, setErr] = useState("");
-
+  const [topReps, setTopReps] = useState([]);
+  const [topAttorneys, setTopAttorneys] = useState([]); // ✅ NEW
+  const [err, setErr] = useState("");
 
   useEffect(() => localStorage.setItem(THEME_KEY, theme), [theme]);
   useEffect(() => localStorage.setItem(LANG_KEY, lang), [lang]);
 
-  // Resolver userName por email (sin modal)
   useEffect(() => {
     let mounted = true;
 
@@ -253,64 +290,64 @@ const [err, setErr] = useState("");
     };
   }, []);
 
-const loadWeeklySummary = async () => {
-  setLoading(true);
-  setErr("");
+  const loadMonthlySummary = async () => {
+    setLoading(true);
+    setErr("");
 
-  try {
-    const data = await fetchWeeklyDashboard(lang);
-    if (!data?.ok) throw new Error("Invalid dashboard data");
+    try {
+      const data = await fetchMonthlyDashboard(lang);
+      if (!data?.ok) throw new Error("Invalid dashboard data");
 
-    // ✅ tu endpoint trae kpis ya listos
-    setKpiPack(data.kpis || null);
+      const k = data.kpis || null;
+      setKpiPack(k);
 
-    // ✅ si no hay answer, arma un summary simple (opcional)
-    const k = data.kpis || {};
-    const autoSummary =
-      lang === "es"
-        ? `Últimos 7 días: ${k.total ?? 0} casos, ${k.confirmed ?? 0} confirmados (${k.confirmationRate ?? 0}%), ${k.dropped ?? 0} dropped (${k.droppedRate ?? 0}%), problemas: ${k.problemCases ?? 0}.`
-        : `Last 7 days: ${k.total ?? 0} cases, ${k.confirmed ?? 0} confirmed (${k.confirmationRate ?? 0}%), ${k.dropped ?? 0} dropped (${k.droppedRate ?? 0}%), problem cases: ${k.problemCases ?? 0}.`;
+      const autoSummary =
+        lang === "es"
+          ? `Mes en curso: ${k?.total ?? 0} casos, ${k?.confirmed ?? 0} confirmados (${k?.confirmationRate ?? 0}%), ${k?.dropped ?? 0} dropped (${k?.droppedRate ?? 0}%), problemas: ${k?.problemCases ?? 0}.`
+          : `Month-to-date: ${k?.total ?? 0} cases, ${k?.confirmed ?? 0} confirmed (${k?.confirmationRate ?? 0}%), ${k?.dropped ?? 0} dropped (${k?.droppedRate ?? 0}%), problem cases: ${k?.problemCases ?? 0}.`;
 
-    setSummary(String(data.executiveSummary || ""));
+      setSummary(String(data.executiveSummary || autoSummary));
+      setChart(data.chart || null);
+      setUpdatedAt(data.updatedAt || null);
 
-
-    setChart(data.chart || null);
-    setUpdatedAt(data.updatedAt || null);
-  } catch (e) {
-    setErr(e.message);
-  } finally {
-    setLoading(false);
-  }
-};
-
+      setTopReps(Array.isArray(data.topReps) ? data.topReps : []);
+      setTopAttorneys(Array.isArray(data.topAttorneys) ? data.topAttorneys : []); // ✅ NEW
+    } catch (e) {
+      setErr(e?.message || "Error");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    loadWeeklySummary();
+    loadMonthlySummary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lang]);
 
   const kpis = useMemo(() => {
-  const p = kpiPack || {};
-  const toNum = (v) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  };
+    // ✅ prefer backend pack; si falla, intenta parsear summary (fallback)
+    const p = kpiPack || parseKpisFromSummary(summary) || {};
 
-return {
-  total: toNum(p.total),
-  confirmed: toNum(p.confirmed),
-  confirmationRate: toNum(p.confirmationRate),
-  dropped: toNum(p.dropped),
-  droppedRate: toNum(p.droppedRate),
-  problemCases: toNum(p.problemCases),
-  active: toNum(p.active),
-  referOut: toNum(p.referOut),
-};
+    const toNum = (v) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
 
+    return {
+      total: toNum(p.total),
+      confirmed: toNum(p.confirmed),
+      confirmationRate: toNum(p.confirmationRate),
+      dropped: toNum(p.dropped),
+      droppedRate: toNum(p.droppedRate),
+      problemCases: toNum(p.problemCases),
+      active: toNum(p.active),
+      referOut: toNum(p.referOut),
+      // ✅ NEW: conversion value (requiere que backend lo envíe en kpis)
+      conversionValue: toNum(p.conversionValue),
+    };
+  }, [kpiPack, summary]);
 
-}, [kpiPack]);
-
-
+  // ===== styles (mismo look, pero mejor UX en botón de chat) =====
   const cardWrap = {
     width: "min(1100px, 100%)",
     margin: "0 auto",
@@ -322,7 +359,10 @@ return {
     border: `1px solid ${t.border}`,
     background: t.surface,
     borderRadius: 18,
-    boxShadow: t.mode === "dark" ? "0 18px 60px rgba(0,0,0,0.40)" : "0 18px 60px rgba(2,6,23,0.10)",
+    boxShadow:
+      t.mode === "dark"
+        ? "0 18px 60px rgba(0,0,0,0.40)"
+        : "0 18px 60px rgba(2,6,23,0.10)",
     overflow: "hidden",
   };
 
@@ -442,7 +482,6 @@ return {
     minWidth: 0,
   };
 
-  // ✅ un poco más de separación general
   const headerRight = { display: "flex", alignItems: "center", gap: 12, flex: "0 0 auto" };
 
   const retryBtn = {
@@ -450,18 +489,20 @@ return {
     fontWeight: 900,
   };
 
+  // ✅ Mejor UX: FAB tipo "pill" con texto y emoji (sin cambiar tu look general)
   const fabBtn = {
     position: "fixed",
     right: 16,
     bottom: `calc(16px + env(safe-area-inset-bottom))`,
-    width: 56,
-    height: 56,
+    height: 52,
+    padding: "0 14px 0 12px",
     borderRadius: 999,
     border: `1px solid ${t.border}`,
     background: t.blue,
     color: "#fff",
-    display: "grid",
-    placeItems: "center",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 10,
     cursor: "pointer",
     zIndex: 9999,
     boxShadow:
@@ -471,9 +512,26 @@ return {
   };
 
   const fabImg = {
-    width: 22,
-    height: 22,
+    width: 24,
+    height: 24,
     objectFit: "contain",
+    borderRadius: 999,
+    background: "rgba(255,255,255,0.15)",
+    padding: 4,
+  };
+
+  const fabText = {
+    fontSize: 13,
+    fontWeight: 950,
+    letterSpacing: 0.2,
+    whiteSpace: "nowrap",
+  };
+
+  const fabHint = {
+    fontSize: 11,
+    fontWeight: 800,
+    opacity: 0.9,
+    marginTop: -2,
   };
 
   const responsiveStyle = `
@@ -490,19 +548,6 @@ return {
   const toneDropped = (kpis.droppedRate ?? 0) >= 2 ? "warn" : "neutral";
   const toneConfirm = (kpis.confirmationRate ?? 0) >= 2 ? "good" : "neutral";
   const toneProblem = (kpis.problemCases ?? 0) > 0 ? "bad" : "good";
-
-  useEffect(() => {
-  console.log("[DashboardPage] chart state =", chart);
-}, [chart]);
-
-useEffect(() => {
-  console.log("[DashboardPage] kpiPack state =", kpiPack);
-}, [kpiPack]);
-
-useEffect(() => {
-  console.log("chart raw:", chart);
-  console.log("chart adapted:", adaptChartForMiniChart(chart));
-}, [chart]);
 
   return (
     <>
@@ -547,7 +592,6 @@ useEffect(() => {
               {theme === "dark" ? "☀️" : "🌙"}
             </button>
 
-            {/* ✅ logout con separación para que no se vea “pegado” */}
             <button
               type="button"
               onClick={() => {
@@ -574,19 +618,19 @@ useEffect(() => {
                       : `${ui.updated}: ${
                           updatedAt ? new Date(updatedAt).toLocaleString() : new Date().toLocaleString()
                         }`}
-
                   </div>
                 </div>
               </div>
 
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <button type="button" onClick={loadWeeklySummary} disabled={loading} style={retryBtn}>
+                <button type="button" onClick={loadMonthlySummary} disabled={loading} style={retryBtn}>
                   {ui.retry}
                 </button>
               </div>
             </div>
 
             <div style={{ padding: 14 }}>
+              {/* ===== KPI GRID ===== */}
               <div className="kpi-grid" style={kpiGrid}>
                 <div style={kpiCard}>
                   <div style={kpiTop}>
@@ -598,6 +642,19 @@ useEffect(() => {
                   </div>
                   <div style={kpiValue}>{fmt(kpis.total)}</div>
                   <div style={kpiFoot}>Cases</div>
+                </div>
+
+                {/* ✅ NEW: Conversion value */}
+                <div style={kpiCard}>
+                  <div style={kpiTop}>
+                    <div style={kpiIcon("good")}>💵</div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={kpiLabel}>{lang === "es" ? "Valor de conversión" : "Conversion value"}</div>
+                      <div style={kpiSub}>USD</div>
+                    </div>
+                  </div>
+                  <div style={kpiValue}>{fmt(kpis.conversionValue)}</div>
+                  <div style={kpiFoot}>Total</div>
                 </div>
 
                 <div style={kpiCard}>
@@ -659,101 +716,211 @@ useEffect(() => {
                   <div style={kpiValue}>{fmt(kpis.problemCases)}</div>
                   <div style={kpiFoot}>Cases</div>
                 </div>
-              </div>
 
-              {(kpis.active !== null || kpis.referOut !== null) && (
-                <div
-                  className="kpi-two"
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: 10,
-                    marginTop: 10,
-                  }}
-                >
-                  <div style={kpiCard}>
-                    <div style={kpiTop}>
-                      <div style={kpiIcon("neutral")}>🟦</div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={kpiLabel}>Active</div>
-                        <div style={kpiSub}>Cases</div>
-                      </div>
+              
+              {kpis.active !== null && (
+                <div style={kpiCard}>
+                  <div style={kpiTop}>
+                    <div style={kpiIcon("neutral")}>🟦</div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={kpiLabel}>Active</div>
+                      <div style={kpiSub}>Cases</div>
                     </div>
-                    <div style={kpiValue}>{fmt(kpis.active)}</div>
-                    <div style={kpiFoot}>Cases</div>
                   </div>
-
-                  <div style={kpiCard}>
-                    <div style={kpiTop}>
-                      <div style={kpiIcon("neutral")}>🔁</div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={kpiLabel}>Refer-out</div>
-                        <div style={kpiSub}>Cases</div>
-                      </div>
-                    </div>
-                    <div style={kpiValue}>{fmt(kpis.referOut)}</div>
-                    <div style={kpiFoot}>Cases</div>
-                  </div>
+                  <div style={kpiValue}>{fmt(kpis.active)}</div>
+                  <div style={kpiFoot}>Cases</div>
                 </div>
               )}
 
+            {/* ✅ 9: Refer-out */}
+            {kpis.referOut !== null && (
+              <div style={kpiCard}>
+                <div style={kpiTop}>
+                  <div style={kpiIcon("neutral")}>🔁</div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={kpiLabel}>Refer-out</div>
+                    <div style={kpiSub}>Cases</div>
+                  </div>
+                </div>
+                <div style={kpiValue}>{fmt(kpis.referOut)}</div>
+                <div style={kpiFoot}>Cases</div>
+              </div>
+            )}
+
+              </div>
+
+            
               {err && <div style={errorBox}>{err}</div>}
 
+              {/* ===== Executive Summary + Chart ===== */}
               <div style={{ marginTop: 12 }}>
                 <div style={sectionTitle}>{ui.exec}</div>
 
-<div style={summaryBox}>
-  {loading ? (
-    <span style={{ opacity: 0.9 }}>Loading…</span>
-  ) : summary ? (
-    <div style={{ display: "grid", gap: 10 }}>
-      {splitBullets(summary).map((line, i) => (
-        <div
-          key={i}
-          style={{
-            display: "flex",
-            gap: 10,
-            alignItems: "flex-start",
-            padding: "10px 12px",
-            borderRadius: 12,
-            border: `1px solid ${t.border}`,
-            background: t.mode === "dark" ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.03)",
-          }}
-        >
-          <div style={{ fontSize: 16, lineHeight: "18px", marginTop: 1 }}>
-            {pickIcon(line, lang)}
-          </div>
-
-          <div style={{ fontSize: 13, fontWeight: 850, color: t.text, lineHeight: 1.45 }}>
-            {line}
-          </div>
-        </div>
-      ))}
-    </div>
-  ) : (
-    <span style={{ opacity: 0.85 }}>—</span>
-  )}
-</div>
-
+                <div style={summaryBox}>
+                  {loading ? (
+                    <span style={{ opacity: 0.9 }}>Loading…</span>
+                  ) : summary ? (
+                    <div style={{ display: "grid", gap: 10 }}>
+                      {splitBullets(summary).map((line, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            display: "flex",
+                            gap: 10,
+                            alignItems: "flex-start",
+                            padding: "10px 12px",
+                            borderRadius: 12,
+                            border: `1px solid ${t.border}`,
+                            background: t.mode === "dark" ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.03)",
+                          }}
+                        >
+                          <div style={{ fontSize: 16, lineHeight: "18px", marginTop: 1 }}>{pickIcon(line)}</div>
+                          <div style={{ fontSize: 13, fontWeight: 850, color: t.text, lineHeight: 1.45 }}>{line}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <span style={{ opacity: 0.85 }}>—</span>
+                  )}
+                </div>
 
                 <div style={{ marginTop: 12 }}>
-                 <MiniChart chart={adaptChartForMiniChart(chart)} t={t} lang={lang} />
+                  <MiniChart chart={adaptChartForMiniChart(chart)} t={t} lang={lang} />
+                </div>
 
+                {/* ===== TOP 10 REPS ===== */}
+                <div style={{ marginTop: 12 }}>
+                  <div style={sectionTitle}>{ui.top10Title}</div>
+
+                  <div
+                    style={{
+                      marginTop: 10,
+                      border: `1px solid ${t.border}`,
+                      background: t.mode === "dark" ? "rgba(15,23,42,0.55)" : "rgba(248,250,252,0.95)",
+                      borderRadius: 14,
+                      overflow: "hidden",
+                    }}
+                  >
+                    {topReps?.length ? (
+                      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                        <thead>
+                          <tr style={{ textAlign: "left" }}>
+                            <th style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>
+                              {ui.repCol}
+                            </th>
+                            <th style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>TTD</th>
+                            <th style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>
+                              {lang === "es" ? "Converted" : "Converted"}
+                            </th>
+                          </tr>
+                        </thead>
+
+                        <tbody>
+                          {topReps.map((r, i) => {
+                            const name = r?.name ?? r?.submitterName ?? "—";
+                            const ttd = Number(r?.ttd ?? r?.total ?? 0);
+                            const convertedValue = Number(r?.convertedValue ?? 0);
+
+                            return (
+                              <tr key={`${name}-${i}`}>
+                                <td style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>
+                                  {name}
+                                </td>
+                                <td style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>
+                                  {fmt(ttd)}
+                                </td>
+                                <td style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>
+                                  {fmtMoney(convertedValue)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <div style={{ padding: 12, opacity: 0.85 }}>—</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ===== TOP 10 ATTORNEYS ===== */}
+                <div style={{ marginTop: 12 }}>
+                  <div style={sectionTitle}>{ui.top10AttorneysTitle}</div>
+
+                  <div
+                    style={{
+                      marginTop: 10,
+                      border: `1px solid ${t.border}`,
+                      background: t.mode === "dark" ? "rgba(15,23,42,0.55)" : "rgba(248,250,252,0.95)",
+                      borderRadius: 14,
+                      overflow: "hidden",
+                    }}
+                  >
+                    {topAttorneys?.length ? (
+                      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                        <thead>
+                          <tr style={{ textAlign: "left" }}>
+                            <th style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>
+                              {ui.attCol}
+                            </th>
+                            <th style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>
+                              {lang === "es" ? "TTD" : "TTD"}
+                            </th>
+                            <th style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>
+                              {lang === "es" ? "Converted" : "Converted"}
+                            </th>
+                          </tr>
+                        </thead>
+
+                        <tbody>
+                          {topAttorneys.map((a, i) => {
+                            const name = a?.name ?? a?.attorneyName ?? "—";
+                            const ttd = Number(a?.ttd ?? a?.total ?? 0);
+                            const convertedValue = Number(a?.convertedValue ?? 0);
+
+                            return (
+                              <tr key={`${name}-${i}`}>
+                                <td style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>
+                                  {name}
+                                </td>
+                                <td style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>
+                                  {fmt(ttd)}
+                                </td>
+                                <td style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>
+                                  {fmtMoney(convertedValue)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <div style={{ padding: 12, opacity: 0.85 }}>—</div>
+                    )}
+                  </div>
                 </div>
               </div>
+              {/* /Executive */}
             </div>
           </div>
         </div>
 
-        {/* ✅ FAB */}
+        {/* ✅ FAB mejorado */}
         <button
           type="button"
           onClick={() => nav("/chat")}
           style={fabBtn}
-          title={ui.openChat}
-          aria-label={ui.openChat}
+          title={lang === "es" ? "Abrir chat" : "Open chat"}
+          aria-label={lang === "es" ? "Abrir chat" : "Open chat"}
         >
-          <img src={logoAvatar} alt="Chat" style={fabImg} />
+          <img src={logoAvatar} alt="" aria-hidden="true" style={fabImg} />
+          <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.05, alignItems: "flex-start" }}>
+            <div style={fabText}>{ui.chatCta}</div>
+            <div style={fabHint}>{ui.chatHint}</div>
+          </div>
+          <div style={{ fontSize: 18, marginLeft: 4 }} aria-hidden="true">
+            💬
+          </div>
         </button>
       </div>
     </>

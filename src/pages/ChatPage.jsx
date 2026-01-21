@@ -483,6 +483,7 @@ export default function ChatPage() {
           text: data.answer,
           expanded: false,
           meta: botMeta,
+           suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
         };
 
         setMessages((prev) => [...prev, botMsg]);
@@ -545,7 +546,15 @@ export default function ChatPage() {
 
         setMessages((prev) => [
           ...prev,
-          { id: makeId(), from: 'bot', text: data.answer, expanded: false, meta: botMeta },
+         {
+          id: makeId(),
+          from: 'bot',
+          text: data.answer,
+          expanded: false,
+          meta: botMeta,
+          suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
+        },
+
         ]);
 
         setPendingPick(data.pick || null);
@@ -696,10 +705,27 @@ export default function ChatPage() {
 
                           if (long && !expanded) return <div style={clampStyle(4)}>{m.text}</div>;
                           return <BotPrettyAnswer text={m.text} t={t} lang={lang} />;
-                        })()}
+                        })()} 
 
                         <LinksBar links={m?.meta?.links} t={t} lang={lang} />
                         <MiniChart chart={m?.meta?.chart} t={t} lang={lang} />
+
+                       {Array.isArray(m?.suggestions) && m.suggestions.length > 0 && (
+                      <div style={s.suggestionsRow(t)}>
+                        {m.suggestions.map((text, i) => (
+                          <button
+                            key={`${m.id || 'm'}-sugg-${i}`}
+                            style={s.suggestionChip(t)}
+                            onClick={() => handleSendText(text)}
+                            title={text}
+                          >
+                            ✨ {text}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+
                       </>
                     ) : (
                       <div style={{ whiteSpace: 'pre-wrap' }}>{m.text}</div>

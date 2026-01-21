@@ -472,5 +472,35 @@ bubbleLogo: {
     fontSize: 12,
     fontWeight: 950,
   }),
+  // ✅ Suggestions (chips tipo ChatGPT debajo del mensaje del bot)
+  suggestionsRow: (t) => ({
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 10,
+  }),
+
+  suggestionChip: (t) => ({
+    border:
+      t.mode === 'dark'
+        ? '1px solid rgba(148,163,184,0.18)'
+        : '1px solid rgba(15,23,42,0.10)',
+    background: t.mode === 'dark'
+      ? 'rgba(15,23,42,0.35)'
+      : 'rgba(248,250,252,0.95)',
+    color: t.mode === 'dark'
+      ? 'rgba(226,232,240,0.92)'
+      : 'rgba(15,23,42,0.90)',
+    borderRadius: 999,
+    padding: '8px 12px',
+    fontSize: 12,
+    fontWeight: 900,
+    cursor: 'pointer',
+    maxWidth: '100%',
+    textAlign: 'left',
+    whiteSpace: 'nowrap',
+  }),
+
+  
 };
 export default s;
