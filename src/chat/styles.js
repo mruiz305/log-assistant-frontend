@@ -364,27 +364,42 @@ bubbleLogo: {
     color: t.text,
   }),
 
-  linksWrap: () => ({
-    display: 'flex',
-    gap: 10,
-    flexWrap: 'wrap',
-    marginTop: 10,
-  }),
+linksWrap: (t) => ({
+  display: 'flex',
+  gap: 10,
+  flexWrap: 'wrap',
+  marginTop: 10,
+  alignItems: 'center',
+}),
 
-  linkBtn: (t) => ({
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 8,
-    padding: '8px 12px',
-    borderRadius: 999,
-    border: `1px solid ${t.border}`,
-    background: t.surface2,
-    color: t.text,
-    fontSize: 12,
-    fontWeight: 900,
-    textDecoration: 'none',
-    cursor: 'pointer',
-  }),
+
+linkBtn: (t) => ({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '9px 12px',
+  borderRadius: 999,
+  border:
+    t.mode === 'dark'
+      ? '1px solid rgba(148,163,184,0.18)'
+      : '1px solid rgba(15,23,42,0.10)',
+  background:
+    t.mode === 'dark'
+      ? 'rgba(15,23,42,0.55)'
+      : 'rgba(248,250,252,0.95)',
+  color: t.text,
+  fontSize: 12,
+  fontWeight: 950,
+  textDecoration: 'none',
+  cursor: 'pointer',
+  boxShadow:
+    t.mode === 'dark'
+      ? '0 10px 25px rgba(0,0,0,0.28)'
+      : '0 10px 22px rgba(15,23,42,0.10)',
+  transform: 'translateY(0)',
+  transition: 'transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease',
+}),
+
 
   modalOverlay: (t) => ({
     position: 'fixed',

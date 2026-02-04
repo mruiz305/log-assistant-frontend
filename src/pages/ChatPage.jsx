@@ -668,7 +668,15 @@ export default function ChatPage() {
       if (data?.ok) {
         setPendingPick(data.pick || null);
 
-        const botMeta = { rowCount: data.rowCount, links: data.links || null, chart: data.chart || null };
+        // ✅ Prioridad: pdfItems (array) -> pdfLinks (object) -> links (legacy)
+        const linksPayload = data.pdfItems || data.pdfLinks || data.links || null;
+
+        const botMeta = {
+          rowCount: data.rowCount,
+          links: linksPayload, // ✅ aquí ya llegan los links de verdad
+          chart: data.chart || null,
+        };
+
         const botMsg = {
           id: makeId(),
           from: "bot",
@@ -736,7 +744,13 @@ export default function ChatPage() {
       const data = await sendChatMessage(msg, lang, clientId, userName);
 
       if (data?.ok) {
-        const botMeta = { rowCount: data.rowCount, links: data.links || null, chart: data.chart || null };
+        const linksPayload = data.pdfItems || data.pdfLinks || data.links || null;
+
+        const botMeta = {
+          rowCount: data.rowCount,
+          links: linksPayload,
+          chart: data.chart || null,
+        };
 
         setMessages((prev) => [
           ...prev,
@@ -1364,7 +1378,8 @@ export default function ChatPage() {
                                     return <BotPrettyAnswer text={m.text} t={t} lang={lang} />;
                                   })()}
 
-                                  <LinksBar links={m?.meta?.links} t={t} lang={lang} />
+                                  <LinksBar links={m?.meta?.links} text={m?.text} t={t} lang={lang} />
+
                                   <MiniChart chart={m?.meta?.chart} t={t} lang={lang} />
 
                                   {Array.isArray(m?.suggestions) && m.suggestions.length > 0 && (
