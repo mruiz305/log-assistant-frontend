@@ -3,7 +3,8 @@ import { safeNum } from '../utils';
 function MiniChart({ chart, t, lang }) {
   if (!chart) return null;
 
-  const kind = String(chart.kind || '').toLowerCase(); // 'bar' | 'line' | 'pie' | 'donut'
+  // ✅ FIX: soporta backend que manda `type` en vez de `kind`
+  const kind = String(chart.kind || chart.type || '').toLowerCase(); // 'bar' | 'line' | 'pie' | 'donut'
   const title = String(chart.title || '').trim();
 
   const labels = Array.isArray(chart.labels) ? chart.labels.map((x) => String(x ?? '')) : [];
@@ -40,7 +41,7 @@ function MiniChart({ chart, t, lang }) {
   const accent3 = t.mode === 'dark' ? 'rgba(59,130,246,0.75)' : 'rgba(59,130,246,0.75)';
   const palette = [accent, accent2, accent3, 'rgba(250,204,21,0.55)', 'rgba(34,197,94,0.55)'];
 
-  // ✅ NEW: si chart.colors viene, se respeta por índice
+  // ✅ si chart.colors viene, se respeta por índice
   const colors = Array.isArray(chart.colors) ? chart.colors : null;
   const colorAt = (i) => (colors?.[i] ? String(colors[i]) : palette[i % palette.length]);
 
@@ -65,8 +66,6 @@ function MiniChart({ chart, t, lang }) {
     return (
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
         <rect x="0" y="0" width={W} height={H} rx="12" fill={svgBg} />
-
-        {/* baseline */}
         <line x1={pad} y1={H - pad} x2={W - pad} y2={H - pad} stroke={stroke} strokeWidth="1" />
 
         {values.map((v, i) => {
@@ -74,11 +73,7 @@ function MiniChart({ chart, t, lang }) {
           const x = pad + i * (barW + gap);
           const y = H - pad - h;
 
-          return (
-            <g key={i}>
-              <rect x={x} y={y} width={barW} height={h} rx="6" fill={colorAt(i)} />
-            </g>
-          );
+          return <rect key={i} x={x} y={y} width={barW} height={h} rx="6" fill={colorAt(i)} />;
         })}
       </svg>
     );
@@ -96,24 +91,19 @@ function MiniChart({ chart, t, lang }) {
     });
 
     const d = pts.map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`)).join(' ');
-
-    // Línea usa el primer color o fallback
     const lineColor = colors?.[0] ? String(colors[0]) : accent;
 
     return (
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
         <rect x="0" y="0" width={W} height={H} rx="12" fill={svgBg} />
 
-        {/* grid */}
         {[0.25, 0.5, 0.75].map((k) => {
           const y = pad + k * (H - pad * 2);
           return <line key={k} x1={pad} y1={y} x2={W - pad} y2={y} stroke={stroke} strokeWidth="1" />;
         })}
 
         <path d={d} fill="none" stroke={lineColor} strokeWidth="3" strokeLinecap="round" />
-        {pts.map((p, i) => (
-          <circle key={i} cx={p.x} cy={p.y} r="4" fill={lineColor} />
-        ))}
+        {pts.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="4" fill={lineColor} />)}
       </svg>
     );
   };
@@ -130,7 +120,7 @@ function MiniChart({ chart, t, lang }) {
     const items = values.map((v, i) => {
       const frac = sumV > 0 ? v / sumV : 0;
       const dash = frac * circ;
-      const gap = 2.0; // separación visual
+      const gap = 2.0;
       const start = acc * circ;
       acc += frac;
 
@@ -138,12 +128,10 @@ function MiniChart({ chart, t, lang }) {
         i,
         dash: Math.max(0, dash - gap),
         offset: -start,
-        color: colorAt(i), // ✅ changed
-        value: v,
+        color: colorAt(i),
       };
     });
 
-    // texto centro
     const centerLabel = String(chart?.center?.label || (lang === 'es' ? 'Total' : 'Total'));
     const centerValue = safeNum(chart?.center?.value, sumV);
 
@@ -153,11 +141,8 @@ function MiniChart({ chart, t, lang }) {
     return (
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
         <rect x="0" y="0" width={W} height={H} rx="12" fill={svgBg} />
-
-        {/* base ring */}
         <circle cx={cx} cy={cy} r={r} fill="none" stroke={stroke} strokeWidth={strokeW} />
 
-        {/* slices */}
         {items.map((it) => (
           <circle
             key={it.i}
@@ -174,7 +159,6 @@ function MiniChart({ chart, t, lang }) {
           />
         ))}
 
-        {/* center text */}
         <text x={cx} y={cy - 2} textAnchor="middle" fontSize="11" fill={t.textMuted} fontWeight="900">
           {centerLabel}
         </text>
@@ -182,7 +166,6 @@ function MiniChart({ chart, t, lang }) {
           {centerValue}
         </text>
 
-        {/* legend */}
         {labels.slice(0, 5).map((lab, i) => (
           <g key={i}>
             <rect x={legendX} y={legendY + i * 18} width="10" height="10" rx="2" fill={colorAt(i)} />
@@ -209,7 +192,6 @@ function MiniChart({ chart, t, lang }) {
       <div style={headerStyle}>{title || titleFallback}</div>
       {body}
 
-      {/* small numbers row */}
       <div style={{ marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         {labels.slice(0, 6).map((lab, i) => (
           <div

@@ -673,8 +673,11 @@ export default function ChatPage() {
 
         const botMeta = {
           rowCount: data.rowCount,
-          links: linksPayload, // ✅ aquí ya llegan los links de verdad
+          links: linksPayload,
           chart: data.chart || null,
+          cards: Array.isArray(data.cards) ? data.cards : null,
+          aiComment: data.aiComment || null,
+          preset: options?.preset || null,
         };
 
         const botMsg = {
@@ -750,6 +753,9 @@ export default function ChatPage() {
           rowCount: data.rowCount,
           links: linksPayload,
           chart: data.chart || null,
+          cards: Array.isArray(data.cards) ? data.cards : null,
+          aiComment: data.aiComment || null,
+          preset: null,
         };
 
         setMessages((prev) => [
@@ -850,6 +856,13 @@ export default function ChatPage() {
     return filtered;
   }, [grouped, convQ]);
 
+  // ✅ helper: en vez de que `pendingPick` afecte TODOS los mensajes,
+  // solo tratamos "raw" el ÚLTIMO mensaje bot cuando hay pick activo.
+  const isPickPromptMessage = (msgIndex) => {
+    if (!pendingPick?.options?.length) return false;
+    return msgIndex === messages.length - 1;
+  };
+
   let lastDay = null;
 
   return (
@@ -857,7 +870,7 @@ export default function ChatPage() {
       <style>{`
         .chat-input::placeholder {
           color: ${t.mode === "dark" ? "rgba(203,213,225,0.75)" : "rgba(71,85,105,0.75)"};
-          font-weight: 500; /* ✅ un poco más formal */
+          font-weight: 500;
         }
 
         .chat-shell {
@@ -900,7 +913,6 @@ export default function ChatPage() {
           letter-spacing: .2px;
         }
 
-        /* ✅ BOTONES DE ICONO (mejor contraste en dark) */
         .icon-btn {
           width: 42px;
           height: 42px;
@@ -1093,6 +1105,19 @@ export default function ChatPage() {
           border: 1px solid ${t.mode === "dark" ? "rgba(59,130,246,0.25)" : "rgba(59,130,246,0.20)"};
           color: ${t.text};
         }
+
+        /* ✅ Sección “Attachments/Insights” dentro del bubble bot */
+        .meta-stack {
+          margin-top: 10px;
+          display: grid;
+          gap: 10px;
+        }
+
+        .soft-sep {
+          height: 1px;
+          background: ${t.mode === "dark" ? "rgba(148,163,184,0.14)" : "rgba(15,23,42,0.08)"};
+          margin: 10px 0;
+        }
       `}</style>
 
       <div style={s.page(t)}>
@@ -1243,7 +1268,7 @@ export default function ChatPage() {
                   <span>☰</span>
                 </button>
 
-                {/* ✅ LOGO: vuelve a ser clickeable al dashboard (como antes) */}
+                {/* ✅ LOGO: clickeable al dashboard */}
                 <div style={s.avatar(t)}>
                   <button
                     type="button"
@@ -1322,7 +1347,7 @@ export default function ChatPage() {
             ) : null}
 
             <main ref={listRef} style={s.list(t)}>
-              {messages.map((m) => {
+              {messages.map((m, idx) => {
                 const isUser = m.from === "user";
                 const long = !isUser && isLongText(m.text);
                 const expanded = !!m.expanded;
@@ -1330,6 +1355,14 @@ export default function ChatPage() {
                 const dk = dayKey(m.createdAt);
                 const showDay = dk && dk !== lastDay;
                 if (showDay) lastDay = dk;
+
+                // ✅ Mejor UX: cards/chart/links ANTES del texto largo (como “bloques”)
+                const hasCards = Array.isArray(m?.meta?.cards) && m.meta.cards.length > 0;
+                const hasChart = !!m?.meta?.chart;
+                const hasLinks = !!m?.meta?.links;
+
+                // ✅ Solo el último mensaje bot se renderiza “raw” cuando hay pendingPick
+                const rawPickPrompt = !isUser && isPickPromptMessage(idx);
 
                 return (
                   <React.Fragment key={m.id}>
@@ -1369,19 +1402,28 @@ export default function ChatPage() {
                       <div style={isUser ? s.bubbleUser(t) : s.bubbleBot(t)}>
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
+                            {/* ✅ BLOQUES (cards/chart/links) primero: sensación “dashboard-like” */}
+                            {!isUser && (hasCards || hasChart || hasLinks) ? (
+                              <div className="meta-stack">
+                                {hasCards ? <CardsBlock cards={m.meta.cards} t={t} /> : null}
+                                {hasChart ? <MiniChart chart={m.meta.chart} t={t} lang={lang} /> : null}
+                                {hasLinks ? <LinksBar links={m.meta.links} text={m.text} t={t} lang={lang} /> : null}
+                                <div className="soft-sep" />
+                              </div>
+                            ) : null}
+
                             <div style={s.messageText(t, isUser)}>
                               {!isUser ? (
                                 <>
-                                  {(() => {
-                                    if (pendingPick?.options?.length > 0) return <div style={{ whiteSpace: "pre-wrap" }}>{m.text}</div>;
-                                    if (long && !expanded) return <div style={clampStyle(4)}>{m.text}</div>;
-                                    return <BotPrettyAnswer text={m.text} t={t} lang={lang} />;
-                                  })()}
+                                  {rawPickPrompt ? (
+                                    <div style={{ whiteSpace: "pre-wrap" }}>{m.text}</div>
+                                  ) : long && !expanded ? (
+                                    <div style={clampStyle(4)}>{m.text}</div>
+                                  ) : (
+                                    <BotPrettyAnswer text={m.text} t={t} lang={lang} />
+                                  )}
 
-                                  <LinksBar links={m?.meta?.links} text={m?.text} t={t} lang={lang} />
-
-                                  <MiniChart chart={m?.meta?.chart} t={t} lang={lang} />
-
+                                  {/* ✅ Suggestions siempre al final, para no competir con KPIs/Chart */}
                                   {Array.isArray(m?.suggestions) && m.suggestions.length > 0 && (
                                     <div style={s.suggestionsRow(t)}>
                                       {m.suggestions.map((text, i) => (
@@ -1529,9 +1571,7 @@ export default function ChatPage() {
                     paddingRight: 14,
                     lineHeight: 1.25,
                     overflow: "auto",
-
-                    
-                   fontFamily:
+                    fontFamily:
                       'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"',
                     fontSize: 13,
                     fontWeight: 700,
@@ -1711,3 +1751,77 @@ const pickStyles = {
     fontSize: 12,
   }),
 };
+
+function CardsBlock({ cards, t }) {
+  return (
+    <div style={{ marginTop: 0, display: "grid", gap: 10 }}>
+      {cards.map((c, idx) => {
+        const icon = c?.icon || "ℹ️";
+        const title = String(c?.title || "").trim();
+        const type = String(c?.type || "").toLowerCase();
+
+        const box = {
+          borderRadius: 14,
+          border: `1px solid ${t.mode === "dark" ? "rgba(148,163,184,0.18)" : "rgba(15,23,42,0.10)"}`,
+          background: t.mode === "dark" ? "rgba(2,6,23,0.26)" : "rgba(255,255,255,0.72)",
+          padding: "10px 12px",
+          backdropFilter: "blur(8px)",
+        };
+
+        const header = {
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          fontWeight: 950,
+          fontSize: 12,
+          color: t.text,
+          letterSpacing: 0.2,
+          marginBottom: 6,
+        };
+
+        const iconStyle = {
+          width: 30,
+          height: 30,
+          borderRadius: 12,
+          display: "grid",
+          placeItems: "center",
+          border: `1px solid ${t.mode === "dark" ? "rgba(148,163,184,0.25)" : t.border}`,
+          background: t.mode === "dark" ? "rgba(30,41,59,0.45)" : "rgba(248,250,252,0.92)",
+          fontSize: 16,
+          flex: "0 0 auto",
+        };
+
+        const body = {
+          fontWeight: 800,
+          fontSize: 12,
+          color: t.mode === "dark" ? "rgba(226,232,240,0.92)" : "rgba(15,23,42,0.88)",
+          lineHeight: 1.35,
+          whiteSpace: "pre-wrap",
+        };
+
+        return (
+          <div key={`${type}-${idx}`} style={box}>
+            <div style={header}>
+              <div style={iconStyle}>{icon}</div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 950 }}>{title || "Info"}</div>
+              </div>
+            </div>
+
+            {Array.isArray(c?.lines) && c.lines.length > 0 ? (
+              <div style={{ display: "grid", gap: 4 }}>
+                {c.lines.map((ln, i) => (
+                  <div key={i} style={body}>
+                    • {ln}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={body}>{String(c?.text || "").trim()}</div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}

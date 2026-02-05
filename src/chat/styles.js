@@ -1,3 +1,4 @@
+// src/chat/styles.js
 const s = {
   page: (t) => ({
     height: '100dvh',
@@ -55,30 +56,28 @@ const s = {
     zIndex: 1,
   },
 
-  // ✅ Logo avatar más “pro”: padding + mejor escala (evita que se vea cortado/mini)
-avatar: (t) => ({
-  width: 36,
-  height: 36,
-  borderRadius: 999,
-  background: t.mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#ffffff', // ✅ ya no negro
-  border: `1px solid ${t.border}`,                                   // ✅ borde fino
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  flexShrink: 0,
-  overflow: 'hidden',
-  padding: 6,
-}),
+  // ✅ Logo avatar más “pro”
+  avatar: (t) => ({
+    width: 36,
+    height: 36,
+    borderRadius: 999,
+    background: t.mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#ffffff',
+    border: `1px solid ${t.border}`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    overflow: 'hidden',
+    padding: 6,
+  }),
 
-
-avatarLogo: {
-  width: '100%',
-  height: '100%',
-  objectFit: 'contain',
-  imageRendering: 'auto',
-  filter: 'none',
-},
-
+  avatarLogo: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain',
+    imageRendering: 'auto',
+    filter: 'none',
+  },
 
   title: (t) => ({ fontSize: 14, fontWeight: 900, color: t.text }),
   subTitle: (t) => ({ fontSize: 12, color: t.textMuted }),
@@ -140,27 +139,27 @@ avatarLogo: {
     marginBottom: 10,
   },
 
-bubbleAvatar: (t) => ({
-  width: 28,
-  height: 28,
-  borderRadius: 999,
-  background: t.mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#ffffff', // ✅ ya no negro
-  border: `1px solid ${t.border}`,                                     // ✅ borde fino
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  flexShrink: 0,
-  overflow: 'hidden',
-  padding: 5,
-}),
+  bubbleAvatar: (t) => ({
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    background: t.mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#ffffff',
+    border: `1px solid ${t.border}`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    overflow: 'hidden',
+    padding: 5,
+  }),
 
-bubbleLogo: {
-  width: '100%',
-  height: '100%',
-  objectFit: 'contain',
-  imageRendering: 'auto',
-  filter: 'none',
-},
+  bubbleLogo: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain',
+    imageRendering: 'auto',
+    filter: 'none',
+  },
 
   bubbleAvatarUser: () => ({
     width: 28,
@@ -176,24 +175,28 @@ bubbleLogo: {
     flexShrink: 0,
   }),
 
+  // ✅ CAMBIO: más ancho en desktop + padding más flexible (mejor para cards/links)
   bubbleBot: (t) => ({
-    maxWidth: '78%',
+    maxWidth: 'min(860px, 78%)', // ✅ antes '78%'
     background: t.bubbleBotBg,
     border: `1px solid ${t.bubbleBotBorder}`,
     borderRadius: 18,
     padding: '12px 12px',
   }),
 
+  // ✅ CAMBIO: mismo “min” para el usuario (mantiene consistencia)
   bubbleUser: (t) => ({
-    maxWidth: '78%',
+    maxWidth: 'min(860px, 78%)', // ✅ antes '78%'
     background: t.bubbleUserBg,
     color: '#fff',
     borderRadius: 18,
     padding: '12px 12px',
   }),
 
+  // ✅ CAMBIO: 16px en bot hace que BotPrettyAnswer se vea enorme.
+  // Recomendación: 14px para bot, 16px para user (queda pro).
   messageText: (t, isUser) => ({
-    fontSize: 16,
+    fontSize: isUser ? 16 : 14, // ✅ antes 16 fijo
     lineHeight: 1.45,
     fontWeight: 600,
     color: isUser ? '#ffffff' : t.text,
@@ -211,15 +214,14 @@ bubbleLogo: {
     cursor: 'pointer',
   }),
 
- suggestWrap: (t) => ({
-  padding: '10px 10px 8px',
-  borderTop: `1px solid ${t.border}`,
-  background: t.mode === 'dark' ? t.headerBg : '#ffffff',
-  flexShrink: 0,
-  position: 'relative',
-  zIndex: 2,
-}),
-
+  suggestWrap: (t) => ({
+    padding: '10px 10px 8px',
+    borderTop: `1px solid ${t.border}`,
+    background: t.mode === 'dark' ? t.headerBg : '#ffffff',
+    flexShrink: 0,
+    position: 'relative',
+    zIndex: 2,
+  }),
 
   suggestScroll: {
     display: 'flex',
@@ -250,14 +252,13 @@ bubbleLogo: {
     whiteSpace: 'nowrap',
   }),
 
- composer: (t) => ({
-  padding: '10px 10px calc(10px + env(safe-area-inset-bottom))',
-  background: t.bg,
-  flexShrink: 0,
-  position: 'relative',
-  zIndex: 3,
-}),
-
+  composer: (t) => ({
+    padding: '10px 10px calc(10px + env(safe-area-inset-bottom))',
+    background: t.bg,
+    flexShrink: 0,
+    position: 'relative',
+    zIndex: 3,
+  }),
 
   inputWrap: (t) => ({
     display: 'flex',
@@ -364,42 +365,40 @@ bubbleLogo: {
     color: t.text,
   }),
 
-linksWrap: (t) => ({
-  display: 'flex',
-  gap: 10,
-  flexWrap: 'wrap',
-  marginTop: 10,
-  alignItems: 'center',
-}),
+  linksWrap: (t) => ({
+    display: 'flex',
+    gap: 10,
+    flexWrap: 'wrap',
+    marginTop: 10,
+    alignItems: 'center',
+  }),
 
-
-linkBtn: (t) => ({
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 8,
-  padding: '9px 12px',
-  borderRadius: 999,
-  border:
-    t.mode === 'dark'
-      ? '1px solid rgba(148,163,184,0.18)'
-      : '1px solid rgba(15,23,42,0.10)',
-  background:
-    t.mode === 'dark'
-      ? 'rgba(15,23,42,0.55)'
-      : 'rgba(248,250,252,0.95)',
-  color: t.text,
-  fontSize: 12,
-  fontWeight: 950,
-  textDecoration: 'none',
-  cursor: 'pointer',
-  boxShadow:
-    t.mode === 'dark'
-      ? '0 10px 25px rgba(0,0,0,0.28)'
-      : '0 10px 22px rgba(15,23,42,0.10)',
-  transform: 'translateY(0)',
-  transition: 'transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease',
-}),
-
+  linkBtn: (t) => ({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '9px 12px',
+    borderRadius: 999,
+    border:
+      t.mode === 'dark'
+        ? '1px solid rgba(148,163,184,0.18)'
+        : '1px solid rgba(15,23,42,0.10)',
+    background:
+      t.mode === 'dark'
+        ? 'rgba(15,23,42,0.55)'
+        : 'rgba(248,250,252,0.95)',
+    color: t.text,
+    fontSize: 12,
+    fontWeight: 950,
+    textDecoration: 'none',
+    cursor: 'pointer',
+    boxShadow:
+      t.mode === 'dark'
+        ? '0 10px 25px rgba(0,0,0,0.28)'
+        : '0 10px 22px rgba(15,23,42,0.10)',
+    transform: 'translateY(0)',
+    transition: 'transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease',
+  }),
 
   modalOverlay: (t) => ({
     position: 'fixed',
@@ -414,8 +413,8 @@ linkBtn: (t) => ({
 
   modalCard: (t) => ({
     width: 'min(420px, 92vw)',
-    maxWidth: '92vw',          // ✅ extra safety
-    boxSizing: 'border-box',   // ✅ CLAVE
+    maxWidth: '92vw',
+    boxSizing: 'border-box',
     borderRadius: 18,
     background: t.surface,
     border: `1px solid ${t.border}`,
@@ -424,7 +423,7 @@ linkBtn: (t) => ({
         ? '0 25px 60px rgba(0,0,0,0.60)'
         : '0 25px 60px rgba(15,23,42,0.18)',
     padding: 16,
-    overflow: 'hidden',        
+    overflow: 'hidden',
   }),
 
   modalTitle: (t) => ({
@@ -444,8 +443,8 @@ linkBtn: (t) => ({
 
   modalInput: (t) => ({
     width: '100%',
-    maxWidth: '100%',          // ✅ extra safety
-    boxSizing: 'border-box',   // ✅ CLAVE
+    maxWidth: '100%',
+    boxSizing: 'border-box',
     borderRadius: 12,
     border: `1px solid ${t.border}`,
     padding: '12px 12px',
@@ -461,9 +460,8 @@ linkBtn: (t) => ({
     justifyContent: 'flex-end',
     gap: 10,
     marginTop: 12,
-    flexWrap: 'wrap',     
+    flexWrap: 'wrap',
   },
-
 
   modalBtnGhost: (t) => ({
     height: 38,
@@ -487,7 +485,8 @@ linkBtn: (t) => ({
     fontSize: 12,
     fontWeight: 950,
   }),
-  // ✅ Suggestions (chips tipo ChatGPT debajo del mensaje del bot)
+
+  // ✅ Suggestions (chips)
   suggestionsRow: (t) => ({
     display: 'flex',
     flexWrap: 'wrap',
@@ -495,6 +494,7 @@ linkBtn: (t) => ({
     marginTop: 10,
   }),
 
+  // ✅ CAMBIO: permitir que el chip “quiebre” en pantallas pequeñas (evita overflow)
   suggestionChip: (t) => ({
     border:
       t.mode === 'dark'
@@ -513,9 +513,9 @@ linkBtn: (t) => ({
     cursor: 'pointer',
     maxWidth: '100%',
     textAlign: 'left',
-    whiteSpace: 'nowrap',
+    whiteSpace: 'normal',      // ✅ antes 'nowrap'
+    lineHeight: 1.2,           // ✅ se ve más pro
   }),
-
-  
 };
+
 export default s;
