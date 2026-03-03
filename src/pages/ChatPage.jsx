@@ -273,6 +273,9 @@ export default function ChatPage() {
   const [loadingConvs, setLoadingConvs] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  // ✅ Scope UI (lo manda el backend en cada respuesta)
+  const [scopeUi, setScopeUi] = useState({ mode: "general", label: "General" });
+
   const [theme, setTheme] = useState(() => {
     const saved = localStorage.getItem(THEME_KEY);
     return saved === "light" ? "light" : "dark";
@@ -329,6 +332,8 @@ export default function ChatPage() {
           setConversations([]);
           historyLoadedRef.current = false;
           didInitClientIdRef.current = false;
+          // ✅ reset scope cuando no hay user
+          setScopeUi({ mode: "general", label: "General" });
           return;
         }
 
@@ -503,9 +508,16 @@ export default function ChatPage() {
         if (history.length > 0) {
           historyLoadedRef.current = true;
           setMessages(history);
+
+          // ✅ RESTAURAR SCOPE desde el historial (último mensaje que lo tenga)
+          const lastWithScope = [...history].reverse().find((m) => m?.meta?.scope?.label);
+          if (lastWithScope?.meta?.scope?.label) setScopeUi(lastWithScope.meta.scope);
+          else setScopeUi({ mode: "general", label: "General" });
         } else {
           historyLoadedRef.current = false;
           setMessages([{ id: makeId(), from: "bot", text: ui.welcome, createdAt: Date.now() }]);
+          // ✅ reset scope si no hay historial
+          setScopeUi({ mode: "general", label: "General" });
         }
 
         setUnreadCount(0);
@@ -523,6 +535,7 @@ export default function ChatPage() {
   const quickPrompts = useMemo(() => {
     if (lang === "es") {
       return [
+        { label: "Cambiar filtro", preset: "change_scope" },
         { label: "Confirmados (mes)", preset: "confirmed_month" },
         { label: "Mejor confirmación (año)", preset: "best_confirmation_year" },
         { label: "Dropped últimos 3 meses", preset: "dropped_last_3_months" },
@@ -532,6 +545,7 @@ export default function ChatPage() {
       ];
     }
     return [
+      { label: "Change scope", preset: "change_scope" },
       { label: "Confirmed (month)", preset: "confirmed_month" },
       { label: "Best confirmation (year)", preset: "best_confirmation_year" },
       { label: "Dropped last 3 months", preset: "dropped_last_3_months" },
@@ -668,6 +682,9 @@ export default function ChatPage() {
       if (data?.ok) {
         setPendingPick(data.pick || null);
 
+        // ✅ actualizar scope en UI si backend lo envía
+        if (data?.scope?.label) setScopeUi(data.scope);
+
         // ✅ Prioridad: pdfItems (array) -> pdfLinks (object) -> links (legacy)
         const linksPayload = data.pdfItems || data.pdfLinks || data.links || null;
 
@@ -678,6 +695,7 @@ export default function ChatPage() {
           cards: Array.isArray(data.cards) ? data.cards : null,
           aiComment: data.aiComment || null,
           preset: options?.preset || null,
+          scope: data.scope || null, // ✅ NUEVO: persistir scope
         };
 
         const botMsg = {
@@ -747,6 +765,9 @@ export default function ChatPage() {
       const data = await sendChatMessage(msg, lang, clientId, userName);
 
       if (data?.ok) {
+        // ✅ actualizar scope en UI si backend lo envía (también en picks)
+        if (data?.scope?.label) setScopeUi(data.scope);
+
         const linksPayload = data.pdfItems || data.pdfLinks || data.links || null;
 
         const botMeta = {
@@ -756,6 +777,7 @@ export default function ChatPage() {
           cards: Array.isArray(data.cards) ? data.cards : null,
           aiComment: data.aiComment || null,
           preset: null,
+          scope: data.scope || null, // ✅ NUEVO: persistir scope
         };
 
         setMessages((prev) => [
@@ -827,6 +849,9 @@ export default function ChatPage() {
     setUnreadCount(0);
     setIsNearBottom(true);
     setMenuOpen(false);
+
+    // ✅ reset scope en chat nuevo
+    setScopeUi({ mode: "general", label: "General" });
   };
 
   const openConversation = (cid) => {
@@ -837,6 +862,7 @@ export default function ChatPage() {
     setUnreadCount(0);
     setIsNearBottom(true);
     setMenuOpen(false);
+    // (scopeUi se restablece cuando carga el historial en el useEffect)
   };
 
   const grouped = useMemo(() => groupConversations(conversations || [], lang), [conversations, lang]);
@@ -1300,6 +1326,23 @@ export default function ChatPage() {
                     <span style={s.dotOnline} />
                     <span style={s.pillText(t)}>{ui.online}</span>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSendText(lang === "es" ? "Cambiar filtro" : "Change scope")}
+                    style={{
+                      ...s.pill(t),
+                      cursor: "pointer",
+                      maxWidth: 320,
+                      overflow: "hidden",
+                    }}
+                    title={lang === "es" ? "Cambiar filtro/alcance" : "Change filter/scope"}
+                  >
+                    <span style={s.pillText(t)}>
+                      📌 {lang === "es" ? "Filtro:" : "Scope:"}{" "}
+                      {scopeUi?.label || (lang === "es" ? "General" : "General")}
+                    </span>
+                  </button>
 
                   <button
                     type="button"
@@ -1823,5 +1866,6 @@ function CardsBlock({ cards, t }) {
         );
       })}
     </div>
-  );
+ 
+);
 }
