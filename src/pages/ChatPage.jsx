@@ -1,4 +1,4 @@
-// src/pages/ChatPage.jsx
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import logoAvatar from "../assets/logo_avatar.png";
@@ -39,7 +39,7 @@ const LANG_KEY = "log_assistant_lang";
 const CLIENT_ID_KEY = "log_assistant_client_id";
 const USER_NAME_KEY = "log_assistant_user_name";
 
-/** ✅ Limpia label para UI: SOLO nombre (sin correo, sin "·", sin repetición) */
+/** Limpia label para UI: SOLO nombre (sin correo, sin "·", sin repetición) */
 function cleanPickLabel(label = "") {
   const raw = String(label || "");
   let s2 = raw.replace(/\S+@\S+\.\S+/g, "").trim();
@@ -151,7 +151,7 @@ function fmtShortDate(ts, lang) {
   }
 }
 
-/* ✅ Mensajería: hora + separadores por día */
+/* Mensajería: hora + separadores por día */
 function fmtTime(ts, lang) {
   const d = toDateSafe(ts);
   if (!d) return "";
@@ -273,7 +273,7 @@ export default function ChatPage() {
   const [loadingConvs, setLoadingConvs] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // ✅ Scope UI (lo manda el backend en cada respuesta)
+  // Scope UI (lo manda el backend en cada respuesta)
   const [scopeUi, setScopeUi] = useState({ mode: "general", label: "General" });
 
   const [theme, setTheme] = useState(() => {
@@ -297,21 +297,21 @@ export default function ChatPage() {
   const [userName, setUserName] = useState(() => readStoredName(USER_NAME_KEY));
   const [askNameOpen, setAskNameOpen] = useState(false);
 
-  // ✅ Header menu (⋯)
+  // Header menu (⋯)
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // ✅ evita que te “regrese” a lastClientId cuando seleccionas otra conversación
+  // evita que te “regrese” a lastClientId cuando seleccionas otra conversación
   const didInitClientIdRef = useRef(false);
 
-  // ✅ si cargamos historial, NO reemplazar por welcome luego
+  // si cargamos historial, NO reemplazar por welcome luego
   const historyLoadedRef = useRef(false);
 
-  // ✅ autoscroll inteligente
+  // autoscroll inteligente
   const listRef = useRef(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // ✅ search en conversaciones
+  // search en conversaciones
   const [convQ, setConvQ] = useState("");
 
   useEffect(() => {
@@ -332,14 +332,14 @@ export default function ChatPage() {
           setConversations([]);
           historyLoadedRef.current = false;
           didInitClientIdRef.current = false;
-          // ✅ reset scope cuando no hay user
+          // reset scope cuando no hay user
           setScopeUi({ mode: "general", label: "General" });
           return;
         }
 
         setUid(fbUser.uid);
 
-        // ✅ SOLO UNA VEZ: toma lastClientId si existe
+        // SOLO UNA VEZ: toma lastClientId si existe
         if (!didInitClientIdRef.current) {
           didInitClientIdRef.current = true;
           try {
@@ -356,7 +356,7 @@ export default function ChatPage() {
           }
         }
 
-        // ✅ upsert users/{uid}
+        // upsert users/{uid}
         try {
           await upsertUserDoc(fbUser.uid, {
             email: fbUser.email || null,
@@ -368,7 +368,7 @@ export default function ChatPage() {
           console.error("[FS] upsertUserDoc failed:", e);
         }
 
-        // ✅ nombre
+        // nombre
         const email = (fbUser.email || "").trim().toLowerCase();
         const saved = readStoredName(USER_NAME_KEY);
 
@@ -461,7 +461,7 @@ export default function ChatPage() {
     { id: makeId(), from: "bot", text: ui.welcome, createdAt: Date.now() },
   ]);
 
-  // ✅ solo actualizar welcome si NO hay historial cargado
+  // solo actualizar welcome si NO hay historial cargado
   useEffect(() => {
     if (historyLoadedRef.current) return;
     setMessages((prev) => {
@@ -491,14 +491,14 @@ export default function ChatPage() {
     }
   };
 
-  // ✅ cargar lista de conversaciones cuando hay uid
+  // cargar lista de conversaciones cuando hay uid
   useEffect(() => {
     if (!uid) return;
     refreshConversations({ silent: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid]);
 
-  // ✅ cargar historial cuando cambie clientId
+  // cargar historial cuando cambie clientId
   useEffect(() => {
     if (!uid || !clientId) return;
 
@@ -509,14 +509,14 @@ export default function ChatPage() {
           historyLoadedRef.current = true;
           setMessages(history);
 
-          // ✅ RESTAURAR SCOPE desde el historial (último mensaje que lo tenga)
+          // RESTAURAR SCOPE desde el historial (último mensaje que lo tenga)
           const lastWithScope = [...history].reverse().find((m) => m?.meta?.scope?.label);
           if (lastWithScope?.meta?.scope?.label) setScopeUi(lastWithScope.meta.scope);
           else setScopeUi({ mode: "general", label: "General" });
         } else {
           historyLoadedRef.current = false;
           setMessages([{ id: makeId(), from: "bot", text: ui.welcome, createdAt: Date.now() }]);
-          // ✅ reset scope si no hay historial
+          // reset scope si no hay historial
           setScopeUi({ mode: "general", label: "General" });
         }
 
@@ -563,7 +563,7 @@ export default function ChatPage() {
   useEffect(() => localStorage.setItem(THEME_KEY, theme), [theme]);
   useEffect(() => localStorage.setItem(LANG_KEY, lang), [lang]);
 
-  // ✅ autoscroll inteligente + unread
+  // autoscroll inteligente + unread
   const handleListScroll = () => {
     const el = listRef.current;
     if (!el) return;
@@ -602,7 +602,7 @@ export default function ChatPage() {
     setIsNearBottom(true);
   };
 
-  // ✅ Cerrar menú con ESC (pro)
+  // Cerrar menú con ESC (pro)
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") setMenuOpen(false);
@@ -682,10 +682,10 @@ export default function ChatPage() {
       if (data?.ok) {
         setPendingPick(data.pick || null);
 
-        // ✅ actualizar scope en UI si backend lo envía
+        // actualizar scope en UI si backend lo envía
         if (data?.scope?.label) setScopeUi(data.scope);
 
-        // ✅ Prioridad: pdfItems (array) -> pdfLinks (object) -> links (legacy)
+        // Prioridad: pdfItems (array) -> pdfLinks (object) -> links (legacy)
         const linksPayload = data.pdfItems || data.pdfLinks || data.links || null;
 
         const botMeta = {
@@ -765,7 +765,7 @@ export default function ChatPage() {
       const data = await sendChatMessage(msg, lang, clientId, userName);
 
       if (data?.ok) {
-        // ✅ actualizar scope en UI si backend lo envía (también en picks)
+        // actualizar scope en UI si backend lo envía (también en picks)
         if (data?.scope?.label) setScopeUi(data.scope);
 
         const linksPayload = data.pdfItems || data.pdfLinks || data.links || null;
@@ -850,7 +850,7 @@ export default function ChatPage() {
     setIsNearBottom(true);
     setMenuOpen(false);
 
-    // ✅ reset scope en chat nuevo
+    // reset scope en chat nuevo
     setScopeUi({ mode: "general", label: "General" });
   };
 
@@ -882,7 +882,7 @@ export default function ChatPage() {
     return filtered;
   }, [grouped, convQ]);
 
-  // ✅ helper: en vez de que `pendingPick` afecte TODOS los mensajes,
+  // helper: en vez de que `pendingPick` afecte TODOS los mensajes,
   // solo tratamos "raw" el ÚLTIMO mensaje bot cuando hay pick activo.
   const isPickPromptMessage = (msgIndex) => {
     if (!pendingPick?.options?.length) return false;
@@ -1279,7 +1279,7 @@ export default function ChatPage() {
               <img src={logoWatermark} alt="" aria-hidden="true" style={s.headerWatermark(t)} />
 
               <div style={s.headerLeft}>
-                {/* ✅ Hamburger (solo móvil) */}
+            
                 <button
                   type="button"
                   className="icon-btn hamburger-only"
@@ -1294,7 +1294,7 @@ export default function ChatPage() {
                   <span>☰</span>
                 </button>
 
-                {/* ✅ LOGO: clickeable al dashboard */}
+         
                 <div style={s.avatar(t)}>
                   <button
                     type="button"
@@ -1399,13 +1399,11 @@ export default function ChatPage() {
                 const showDay = dk && dk !== lastDay;
                 if (showDay) lastDay = dk;
 
-                // ✅ Mejor UX: cards/chart/links ANTES del texto largo (como “bloques”)
-                const hasCards = Array.isArray(m?.meta?.cards) && m.meta.cards.length > 0;
+                 const hasCards = Array.isArray(m?.meta?.cards) && m.meta.cards.length > 0;
                 const hasChart = !!m?.meta?.chart;
                 const hasLinks = !!m?.meta?.links;
 
-                // ✅ Solo el último mensaje bot se renderiza “raw” cuando hay pendingPick
-                const rawPickPrompt = !isUser && isPickPromptMessage(idx);
+               const rawPickPrompt = !isUser && isPickPromptMessage(idx);
 
                 return (
                   <React.Fragment key={m.id}>
@@ -1653,8 +1651,7 @@ export default function ChatPage() {
         {askNameOpen && <NameModal t={t} lang={lang} onSave={saveUserName} onSkip={() => setAskNameOpen(false)} />}
       </div>
 
-      {/* ✅ MENU GLOBAL (fixed) — NO se recorta por el header */}
-      {menuOpen ? (
+       {menuOpen ? (
         <>
           <div
             onClick={() => setMenuOpen(false)}
@@ -1731,7 +1728,7 @@ function menuItemStyle(t) {
   };
 }
 
-/* ✅ estilos locales SOLO para el panel pick */
+
 const pickStyles = {
   wrapInline: (t) => ({
     margin: 0,

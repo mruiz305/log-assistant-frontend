@@ -1,4 +1,4 @@
-// src/firebase.js
+
 import { initializeApp } from "firebase/app";
 import { getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { initializeFirestore } from "firebase/firestore";
@@ -15,13 +15,13 @@ const app = initializeApp(firebaseConfig);
 console.log("[FIREBASE] projectId =", firebaseConfig.projectId);
 console.log("[FIREBASE] authDomain =", firebaseConfig.authDomain);
 
-// ✅ Auth
+// Auth
 export const auth = getAuth(app);
 setPersistence(auth, browserLocalPersistence).catch((e) => {
   console.error("[FIREBASE] setPersistence failed:", e);
 });
 
-// ✅ Firestore (FIX para CORS/WebChannel issues)
+// Firestore (FIX para CORS/WebChannel issues)
 export const db = initializeFirestore(app, {
   experimentalAutoDetectLongPolling: true,
   useFetchStreams: false,

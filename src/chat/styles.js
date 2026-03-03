@@ -1,4 +1,4 @@
-// src/chat/styles.js
+
 const s = {
   page: (t) => ({
     height: '100dvh',
@@ -56,7 +56,6 @@ const s = {
     zIndex: 1,
   },
 
-  // ✅ Logo avatar más “pro”
   avatar: (t) => ({
     width: 36,
     height: 36,
@@ -175,28 +174,24 @@ const s = {
     flexShrink: 0,
   }),
 
-  // ✅ CAMBIO: más ancho en desktop + padding más flexible (mejor para cards/links)
-  bubbleBot: (t) => ({
-    maxWidth: 'min(860px, 78%)', // ✅ antes '78%'
+   bubbleBot: (t) => ({
+    maxWidth: 'min(860px, 78%)', 
     background: t.bubbleBotBg,
     border: `1px solid ${t.bubbleBotBorder}`,
     borderRadius: 18,
     padding: '12px 12px',
   }),
 
-  // ✅ CAMBIO: mismo “min” para el usuario (mantiene consistencia)
   bubbleUser: (t) => ({
-    maxWidth: 'min(860px, 78%)', // ✅ antes '78%'
+    maxWidth: 'min(860px, 78%)', 
     background: t.bubbleUserBg,
     color: '#fff',
     borderRadius: 18,
     padding: '12px 12px',
   }),
 
-  // ✅ CAMBIO: 16px en bot hace que BotPrettyAnswer se vea enorme.
-  // Recomendación: 14px para bot, 16px para user (queda pro).
   messageText: (t, isUser) => ({
-    fontSize: isUser ? 16 : 14, // ✅ antes 16 fijo
+    fontSize: isUser ? 16 : 14, 
     lineHeight: 1.45,
     fontWeight: 600,
     color: isUser ? '#ffffff' : t.text,
@@ -486,16 +481,14 @@ const s = {
     fontWeight: 950,
   }),
 
-  // ✅ Suggestions (chips)
-  suggestionsRow: (t) => ({
+   suggestionsRow: (t) => ({
     display: 'flex',
     flexWrap: 'wrap',
     gap: 10,
     marginTop: 10,
   }),
 
-  // ✅ CAMBIO: permitir que el chip “quiebre” en pantallas pequeñas (evita overflow)
-  suggestionChip: (t) => ({
+   suggestionChip: (t) => ({
     border:
       t.mode === 'dark'
         ? '1px solid rgba(148,163,184,0.18)'
@@ -513,8 +506,8 @@ const s = {
     cursor: 'pointer',
     maxWidth: '100%',
     textAlign: 'left',
-    whiteSpace: 'normal',      // ✅ antes 'nowrap'
-    lineHeight: 1.2,           // ✅ se ve más pro
+    whiteSpace: 'normal',      
+    lineHeight: 1.2,           
   }),
 };
 

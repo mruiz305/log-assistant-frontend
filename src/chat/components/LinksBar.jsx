@@ -1,4 +1,4 @@
-// src/chat/components/LinksBar.jsx
+
 import s from "../styles";
 
 function extractUrls(text = "") {
@@ -10,7 +10,7 @@ function extractUrls(text = "") {
 function normalizePdfLinks({ links, text } = {}) {
   if (!links) links = null;
 
-  // ✅ 1) Si viene como array (pdfItems)
+  // 1) Si viene como array (pdfItems)
   // Ej: [{ id:'logs', label:'Log completo (PDF)', url:'https://...' }, ...]
   if (Array.isArray(links)) {
     const findBy = (rxList = []) =>
@@ -35,7 +35,7 @@ function normalizePdfLinks({ links, text } = {}) {
     return { logsPdf, rosterPdf };
   }
 
-  // ✅ 2) Si viene como objeto (pdfLinks)
+  // 2) Si viene como objeto (pdfLinks)
   if (links && typeof links === "object") {
     const pick = (...keys) => {
       for (const k of keys) {
@@ -55,7 +55,7 @@ function normalizePdfLinks({ links, text } = {}) {
     if (logsPdf || rosterPdf) return { logsPdf, rosterPdf };
   }
 
-  // ✅ 3) Fallback: extraer urls del texto
+  // 3) Fallback: extraer urls del texto
   const urls = extractUrls(text);
   const logCandidate =
     urls.find((u) => /log|logs|complete|completo/i.test(u)) ||

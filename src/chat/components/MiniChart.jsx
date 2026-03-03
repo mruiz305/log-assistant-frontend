@@ -3,7 +3,7 @@ import { safeNum } from '../utils';
 function MiniChart({ chart, t, lang }) {
   if (!chart) return null;
 
-  // ✅ FIX: soporta backend que manda `type` en vez de `kind`
+  // FIX: soporta backend que manda `type` en vez de `kind`
   const kind = String(chart.kind || chart.type || '').toLowerCase(); // 'bar' | 'line' | 'pie' | 'donut'
   const title = String(chart.title || '').trim();
 
@@ -41,7 +41,7 @@ function MiniChart({ chart, t, lang }) {
   const accent3 = t.mode === 'dark' ? 'rgba(59,130,246,0.75)' : 'rgba(59,130,246,0.75)';
   const palette = [accent, accent2, accent3, 'rgba(250,204,21,0.55)', 'rgba(34,197,94,0.55)'];
 
-  // ✅ si chart.colors viene, se respeta por índice
+
   const colors = Array.isArray(chart.colors) ? chart.colors : null;
   const colorAt = (i) => (colors?.[i] ? String(colors[i]) : palette[i % palette.length]);
 

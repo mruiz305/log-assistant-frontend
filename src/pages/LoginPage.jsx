@@ -9,7 +9,6 @@ import {
 } from "firebase/auth";
 import { auth } from "../firebase";
 
-// ✅ Reusa tu theme y estilos del chat (ajusta rutas si tus folders cambian)
 import { makeTheme } from "../chat/theme";
 import chatStyles from "../chat/styles";
 
@@ -64,7 +63,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  // ✅ Theme toggle (mismo key que ChatPage)
+
   const [theme, setTheme] = useState(() => {
     const saved = localStorage.getItem(THEME_KEY);
     return saved === "light" ? "light" : "dark";
@@ -144,7 +143,6 @@ export default function LoginPage() {
     }
   };
 
-  // ✅ estilos “computados” usando tu theme (sin chorizo ni archivos nuevos)
   const shellStyle = {
     ...S.shell,
     background: t.mode === "dark" ? "rgba(17,24,39,0.70)" : "rgba(255,255,255,0.92)",
@@ -201,7 +199,7 @@ export default function LoginPage() {
     <div
       style={{
         ...chatStyles.page(t),
-        // ✅ conserva tu gradiente “bonito” pero con modo dark/light
+        
         padding: "clamp(10px, 3vw, 22px)",
         display: "grid",
         placeItems: "center",
@@ -234,7 +232,7 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {/* ✅ Toggle theme reutilizando tu estilo del chat */}
+              
               <div style={{ marginLeft: "auto" }}>
                 <button
                   type="button"
@@ -311,7 +309,7 @@ export default function LoginPage() {
   );
 }
 
-// ✅ tus estilos actuales (casi intactos)
+
 const S = {
   shell: {
     width: "min(1100px, 100%)",
