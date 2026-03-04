@@ -697,10 +697,10 @@ export default function DashboardPage() {
                     <div style={kpiIcon("good")}>💵</div>
                     <div style={{ minWidth: 0 }}>
                       <div style={kpiLabel}>{lang === "es" ? "Valor de conversión" : "Conversion value"}</div>
-                      <div style={kpiSub}>USD</div>
+                      <div style={kpiSub}></div>
                     </div>
                   </div>
-                  <div style={kpiValue}>{fmtMoney(kpis.conversionValue)}</div>
+                  <div style={kpiValue}>{(kpis.conversionValue)}</div>
                   <div style={kpiFoot}>Total</div>
                 </div>
 
@@ -811,7 +811,7 @@ export default function DashboardPage() {
                               <td style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>{name}</td>
                               <td style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>{fmt(ttd)}</td>
                               <td style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>
-                                {fmtMoney(convertedValue)}
+                                {(convertedValue)}
                               </td>
                             </tr>
                           );
@@ -844,7 +844,7 @@ export default function DashboardPage() {
                               <td style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>{name}</td>
                               <td style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>{fmt(ttd)}</td>
                               <td style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>
-                                {fmtMoney(convertedValue)}
+                                {(convertedValue)}
                               </td>
                             </tr>
                           );
