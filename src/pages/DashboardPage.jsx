@@ -273,10 +273,12 @@ export default function DashboardPage() {
         kpiTitle: "Key metrics (mes en curso)",
         top10Title: "Top 10 representantes (mes en curso)",
         top10AttorneysTitle: "Top 10 abogados (mes en curso)",
+        top10StatesTitle: "Top 10 estados (mes en curso)",
         chatCta: "Chat",
         chatHint: "Pregúntale a Nexus",
         repCol: "Representante",
         attCol: "Abogado",
+        stateCol: "Estado",
       };
     }
     return {
@@ -290,10 +292,12 @@ export default function DashboardPage() {
       kpiTitle: "Key metrics (month-to-date)",
       top10Title: "Top 10 reps (month-to-date)",
       top10AttorneysTitle: "Top 10 attorneys (month-to-date)",
+      top10StatesTitle: "Top 10 states (month-to-date)",
       chatCta: "Chat",
       chatHint: "Ask Nexus",
       repCol: "Rep",
       attCol: "Attorney",
+      stateCol: "State",
     };
   }, [lang, userName]);
 
@@ -306,12 +310,14 @@ export default function DashboardPage() {
 
   const [topReps, setTopReps] = useState([]);
   const [topAttorneys, setTopAttorneys] = useState([]);
+  const [topStates, setTopStates] = useState([]);
   const [err, setErr] = useState("");
 
   const [openDetails, setOpenDetails] = useState(false);
   const [openChart, setOpenChart] = useState(false);
   const [openReps, setOpenReps] = useState(false);
   const [openAtts, setOpenAtts] = useState(false);
+  const [openStates, setOpenStates] = useState(false);
 
   useEffect(() => localStorage.setItem(THEME_KEY, theme), [theme]);
   useEffect(() => localStorage.setItem(LANG_KEY, lang), [lang]);
@@ -367,6 +373,7 @@ export default function DashboardPage() {
 
       setTopReps(Array.isArray(data.topReps) ? data.topReps : []);
       setTopAttorneys(Array.isArray(data.topAttorneys) ? data.topAttorneys : []);
+      setTopStates(Array.isArray(data.topStates) ? data.topStates : []);
     } catch (e) {
       setErr(e?.message || "Error");
     } finally {
@@ -811,7 +818,7 @@ export default function DashboardPage() {
                               <td style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>{name}</td>
                               <td style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>{fmt(ttd)}</td>
                               <td style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>
-                                {(convertedValue)}
+                                {Number(convertedValue).toFixed(2)}
                               </td>
                             </tr>
                           );
@@ -844,7 +851,40 @@ export default function DashboardPage() {
                               <td style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>{name}</td>
                               <td style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>{fmt(ttd)}</td>
                               <td style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>
-                                {(convertedValue)}
+                                 {Number(convertedValue).toFixed(2)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div style={{ padding: 12, opacity: 0.85 }}>—</div>
+                  )}
+                </Accordion>
+
+                  {/* ===== TOP 10 STATES colapsable ===== */}
+                <Accordion title={ui.top10StatesTitle} open={openStates} setOpen={setOpenStates} t={t}>
+                  {topStates?.length ? (
+                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr style={{ textAlign: "left" }}>
+                          <th style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>{ui.stateCol}</th>
+                          <th style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>TTD</th>
+                          <th style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>Converted</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {topStates.map((s, i) => {
+                          const name = s?.name ?? s?.officeLabel ?? "—";
+                          const ttd = Number(s?.ttd ?? s?.total ?? 0);
+                          const convertedValue = Number(s?.convertedValue ?? 0);
+                          return (
+                            <tr key={`${name}-${i}`}>
+                              <td style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>{name}</td>
+                              <td style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>{fmt(ttd)}</td>
+                              <td style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>
+                                {Number(convertedValue).toFixed(2)}
                               </td>
                             </tr>
                           );
