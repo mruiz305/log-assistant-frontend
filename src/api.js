@@ -3,7 +3,9 @@ import { auth } from "./firebase";
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").trim();
 if (!BASE_URL) throw new Error("Missing VITE_API_BASE_URL");
-console.log("VITE_API_BASE_URL =", import.meta.env.VITE_API_BASE_URL);
+if (import.meta.env.DEV) {
+  console.log("[API] VITE_API_BASE_URL =", import.meta.env.VITE_API_BASE_URL);
+}
 
 // BASE_URL esperado: https://nexus.1800notifications.com/api
 const api = axios.create({ baseURL: BASE_URL });
@@ -70,14 +72,9 @@ export async function sendChatMessage(
   const token = await user.getIdToken();
 
   try {
-    console.log("CHAT REQUEST >>>", {
-      message,
-      lang,
-      clientId,
-      userName,
-      preset,
-      meta,
-    });
+    if (import.meta.env.DEV) {
+      console.log("[API] CHAT REQUEST >>>", { message, lang, clientId, userName, preset, meta });
+    }
 
     const res = await api.post(
       "/chat",
@@ -89,7 +86,7 @@ export async function sendChatMessage(
       }
     );
 
-    console.log("CHAT RESPONSE >>>", res.data);
+    if (import.meta.env.DEV) console.log("[API] CHAT RESPONSE >>>", res.data);
     return res.data;
   } catch (err) {
     console.error("CHAT ERROR >>>", err?.response?.status, err?.response?.data || err);

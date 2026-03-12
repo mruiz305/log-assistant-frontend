@@ -11,7 +11,7 @@ function normalizePdfLinks({ links, text } = {}) {
   if (!links) links = null;
 
   // 1) Si viene como array (pdfItems)
-  // Ej: [{ id:'logs', label:'Log completo (PDF)', url:'https://...' }, ...]
+  // Ej: [{ id:'logs', label:'Open Full Log PDF', url:'https://...' }, ...]
   if (Array.isArray(links)) {
     const findBy = (rxList = []) =>
       links.find((x) => {
@@ -30,9 +30,11 @@ function normalizePdfLinks({ links, text } = {}) {
 
     const logsPdf = logItem?.url || logItem?.href || logItem?.link || null;
     const rosterPdf = rosterItem?.url || rosterItem?.href || rosterItem?.link || null;
+    const labelLogs = logItem?.label || logItem?.title || logItem?.name || null;
+    const labelRoster = rosterItem?.label || rosterItem?.title || rosterItem?.name || null;
 
     if (!logsPdf && !rosterPdf) return null;
-    return { logsPdf, rosterPdf };
+    return { logsPdf, rosterPdf, labelLogs, labelRoster };
   }
 
   // 2) Si viene como objeto (pdfLinks)
@@ -72,11 +74,11 @@ export default function LinksBar({ links, text, t, lang }) {
   const out = normalizePdfLinks({ links, text });
   if (!out) return null;
 
-  const { logsPdf, rosterPdf } = out;
+  const { logsPdf, rosterPdf, labelLogs: customLabelLogs, labelRoster: customLabelRoster } = out;
 
   const title = lang === "es" ? "Documentos" : "Documents";
-  const labelLogs = lang === "es" ? "Log completo (PDF)" : "Full log (PDF)";
-  const labelRoster = lang === "es" ? "Roster (PDF)" : "Roster (PDF)";
+  const labelLogs = customLabelLogs || (lang === "es" ? "Log completo (PDF)" : "Full log (PDF)");
+  const labelRoster = customLabelRoster || (lang === "es" ? "Roster (PDF)" : "Roster (PDF)");
 
   return (
     <div style={{ marginTop: 10 }}>

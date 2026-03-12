@@ -15,8 +15,8 @@ const s = {
   }),
 
   header: (t) => ({
-    height: 56,
-    padding: '10px 12px',
+    height: 60,
+    padding: '12px 16px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -25,6 +25,7 @@ const s = {
     flexShrink: 0,
     position: 'relative',
     overflow: 'hidden',
+    boxShadow: t.mode === 'dark' ? '0 1px 0 rgba(255,255,255,0.04)' : '0 1px 3px rgba(0,0,0,0.04)',
   }),
 
   headerWatermark: (t) => ({
@@ -42,18 +43,24 @@ const s = {
   headerLeft: {
     display: 'flex',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
     minWidth: 0,
+    flex: 1,
     position: 'relative',
     zIndex: 1,
   },
   headerRight: {
     display: 'flex',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     flexShrink: 0,
     position: 'relative',
     zIndex: 1,
+  },
+  headerTitleBlock: {
+    minWidth: 0,
+    flex: 1,
+    overflow: 'hidden',
   },
 
   avatar: (t) => ({
@@ -78,21 +85,44 @@ const s = {
     filter: 'none',
   },
 
-  title: (t) => ({ fontSize: 14, fontWeight: 900, color: t.text }),
-  subTitle: (t) => ({ fontSize: 12, color: t.textMuted }),
+  title: (t) => ({
+    fontSize: 15,
+    fontWeight: 900,
+    color: t.text,
+    letterSpacing: '-0.02em',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  }),
+  subTitle: (t) => ({
+    fontSize: 13,
+    color: t.text,
+    fontWeight: 600,
+    marginTop: 2,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  }),
 
   pill: (t) => ({
     display: 'flex',
     alignItems: 'center',
-    gap: 6,
-    padding: '6px 10px',
-    borderRadius: 999,
+    gap: 8,
+    padding: '8px 12px',
+    borderRadius: 12,
     border: `1px solid ${t.border}`,
     background: t.surface2,
+    transition: 'border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease',
   }),
 
-  dotOnline: { width: 8, height: 8, borderRadius: 999, background: '#22c55e' },
-  pillText: (t) => ({ fontSize: 12, color: t.textMuted, fontWeight: 800 }),
+  dotOnline: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    background: '#22c55e',
+    boxShadow: '0 0 0 2px rgba(34,197,94,0.2)',
+  },
+  pillText: (t) => ({ fontSize: 13, color: t.text, fontWeight: 700 }),
 
   langBtn: (t) => ({
     height: 36,
@@ -125,8 +155,8 @@ const s = {
     flex: 1,
     minHeight: 0,
     overflowY: 'auto',
-    padding: '12px 10px',
-    background: t.mode === 'dark' ? '#0b1220' : '#f5f7fb',
+    padding: '16px 12px',
+    background: t.mode === 'dark' ? 'linear-gradient(180deg, #0c1222 0%, #0b1220 100%)' : '#f8fafc',
   }),
 
   rowBot: { display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 10 },
@@ -175,25 +205,33 @@ const s = {
   }),
 
    bubbleBot: (t) => ({
-    maxWidth: 'min(860px, 78%)', 
+    maxWidth: 'min(860px, 78%)',
     background: t.bubbleBotBg,
     border: `1px solid ${t.bubbleBotBorder}`,
-    borderRadius: 18,
-    padding: '12px 12px',
+    borderRadius: 16,
+    padding: '14px 16px',
+    boxShadow:
+      t.mode === 'dark'
+        ? '0 4px 12px rgba(0,0,0,0.25)'
+        : '0 2px 8px rgba(15,23,42,0.06)',
   }),
 
   bubbleUser: (t) => ({
-    maxWidth: 'min(860px, 78%)', 
+    maxWidth: 'min(860px, 78%)',
     background: t.bubbleUserBg,
     color: '#fff',
-    borderRadius: 18,
-    padding: '12px 12px',
+    borderRadius: 16,
+    padding: '14px 16px',
+    boxShadow:
+      t.mode === 'dark'
+        ? '0 4px 16px rgba(37,99,235,0.35)'
+        : '0 4px 12px rgba(37,99,235,0.25)',
   }),
 
   messageText: (t, isUser) => ({
-    fontSize: isUser ? 16 : 14, 
-    lineHeight: 1.45,
-    fontWeight: 600,
+    fontSize: isUser ? 15 : 14,
+    lineHeight: 1.5,
+    fontWeight: isUser ? 600 : 500,
     color: isUser ? '#ffffff' : t.text,
   }),
 
@@ -210,9 +248,10 @@ const s = {
   }),
 
   suggestWrap: (t) => ({
-    padding: '10px 10px 8px',
+    padding: '12px 12px 10px',
     borderTop: `1px solid ${t.border}`,
-    background: t.mode === 'dark' ? t.headerBg : '#ffffff',
+    background: t.mode === 'dark' ? 'rgba(15,23,42,0.6)' : 'rgba(255,255,255,0.95)',
+    backdropFilter: 'blur(8px)',
     flexShrink: 0,
     position: 'relative',
     zIndex: 2,
@@ -229,22 +268,23 @@ const s = {
 
   suggestChip: (t, isToggle) => ({
     flex: '0 0 auto',
-    borderRadius: 999,
+    borderRadius: 12,
     border: `1px solid ${t.chipBorder}`,
-    padding: '9px 12px',
+    padding: '10px 14px',
     background: isToggle
       ? t.mode === 'dark'
-        ? 'rgba(250,204,21,0.12)'
-        : 'rgba(15,98,254,0.10)'
+        ? 'rgba(59,130,246,0.14)'
+        : 'rgba(59,130,246,0.08)'
       : t.mode === 'dark'
       ? t.chipBg
-      : '#f1f5f9',
+      : t.chipBg,
     color: t.text,
     cursor: 'pointer',
     textAlign: 'left',
-    fontSize: 12,
-    fontWeight: 900,
+    fontSize: 13,
+    fontWeight: 700,
     whiteSpace: 'nowrap',
+    transition: 'border-color 0.15s ease, background 0.15s ease, transform 0.12s ease',
   }),
 
   composer: (t) => ({
@@ -258,17 +298,16 @@ const s = {
   inputWrap: (t) => ({
     display: 'flex',
     alignItems: 'center',
-    gap: 10,
-    background: t.mode === 'dark' ? '#0f172a' : '#ffffff',
-    border: `2px solid ${
-      t.mode === 'dark' ? 'rgba(255,255,255,0.18)' : 'rgba(15,23,42,0.16)'
-    }`,
-    borderRadius: 999,
-    padding: '10px 10px 10px 14px',
+    gap: 12,
+    background: t.mode === 'dark' ? '#151d2e' : '#ffffff',
+    border: `1px solid ${t.mode === 'dark' ? 'rgba(148,163,184,0.16)' : 'rgba(15,23,42,0.10)'}`,
+    borderRadius: 16,
+    padding: '12px 14px 12px 18px',
     boxShadow:
       t.mode === 'dark'
-        ? '0 10px 30px rgba(0,0,0,0.35)'
-        : '0 10px 25px rgba(15,23,42,0.08)',
+        ? '0 8px 24px rgba(0,0,0,0.35)'
+        : '0 4px 16px rgba(15,23,42,0.06)',
+    transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
   }),
 
   input: (t) => ({
@@ -283,17 +322,18 @@ const s = {
   }),
 
   send: (t) => ({
-    width: 40,
-    height: 40,
-    borderRadius: 999,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     border: 'none',
     background: t.blue,
     color: '#fff',
-    fontSize: 16,
-    fontWeight: 900,
+    fontSize: 18,
+    fontWeight: 800,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    transition: 'transform 0.12s ease, background 0.15s ease',
   }),
 
   botAnswerWrap: () => ({ display: 'flex', flexDirection: 'column', gap: 8 }),

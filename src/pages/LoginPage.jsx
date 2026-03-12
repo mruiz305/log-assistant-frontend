@@ -14,11 +14,14 @@ import chatStyles from "../chat/styles";
 
 import companyLogo from "../assets/logo.png";
 
-const THEME_KEY = "log_assistant_theme";
-console.log("ENV CHECK", {
-  VITE_ALLOWED_EMAIL_DOMAIN: import.meta.env.VITE_ALLOWED_EMAIL_DOMAIN,
-  MODE: import.meta.env.MODE,
-});
+import { STORAGE_KEYS } from "../constants";
+
+if (import.meta.env.DEV) {
+  console.log("[LOGIN] ENV CHECK", {
+    VITE_ALLOWED_EMAIL_DOMAIN: import.meta.env.VITE_ALLOWED_EMAIL_DOMAIN,
+    MODE: import.meta.env.MODE,
+  });
+}
 
 function getAllowedDomain() {
   return (import.meta?.env?.VITE_ALLOWED_EMAIL_DOMAIN || "").trim().toLowerCase();
@@ -65,12 +68,12 @@ export default function LoginPage() {
 
 
   const [theme, setTheme] = useState(() => {
-    const saved = localStorage.getItem(THEME_KEY);
+    const saved = localStorage.getItem(STORAGE_KEYS.THEME);
     return saved === "light" ? "light" : "dark";
   });
 
   useEffect(() => {
-    localStorage.setItem(THEME_KEY, theme);
+    localStorage.setItem(STORAGE_KEYS.THEME, theme);
   }, [theme]);
 
   const t = useMemo(() => makeTheme(theme), [theme]);

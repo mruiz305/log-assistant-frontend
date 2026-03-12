@@ -1,4 +1,3 @@
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import logoAvatar from "../assets/logo_avatar.png";
@@ -12,32 +11,95 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { sendChatMessage, resolveUserNameByEmail } from "../api";
 
 import { makeId, readStoredName, isLongText, clampStyle, getInitials } from "../chat/utils";
+import { STORAGE_KEYS } from "../constants";
+import {
+  upsertUserDoc,
+  loadConversationsFromFirestore,
+  saveMessageToFirestore,
+  loadMessagesFromFirestore,
+  groupConversations,
+  fmtShortDate,
+  fmtTime,
+  dayKey,
+  fmtDayLabel,
+} from "../chat/firestore";
 
 import BotPrettyAnswer from "../chat/components/BotPrettyAnswer";
+import CardsBlock from "../chat/components/CardsBlock";
 import LinksBar from "../chat/components/LinksBar";
+import LogsReviewLayout from "../chat/components/LogsReviewLayout";
 import MiniChart from "../chat/components/MiniChart";
 import NameModal from "../chat/components/NameModal";
 import { useNavigate } from "react-router-dom";
 
-import {
-  doc,
-  collection,
-  addDoc,
-  serverTimestamp,
-  query,
-  orderBy,
-  limit,
-  getDocs,
-  setDoc,
-  getDoc,
-} from "firebase/firestore";
-
+import { doc, getDoc } from "firebase/firestore";
+import { serverTimestamp } from "firebase/firestore";
 import { getApp } from "firebase/app";
 
-const THEME_KEY = "log_assistant_theme";
-const LANG_KEY = "log_assistant_lang";
-const CLIENT_ID_KEY = "log_assistant_client_id";
-const USER_NAME_KEY = "log_assistant_user_name";
+/** Pick options: primeros 8 + búsqueda (resto colapsado) */
+function PickOptionsWithSearch({ options, messageId, onPickOption, loading, t, lang }) {
+  const [filter, setFilter] = useState("");
+  const showSearch = options.length > 8;
+  const filtered = !filter.trim()
+    ? options
+    : options.filter((opt) =>
+        cleanPickLabel(opt?.label || opt?.value || "").toLowerCase().includes(filter.trim().toLowerCase())
+      );
+  // Sin búsqueda: mostrar solo 8; con búsqueda: mostrar todos los filtrados
+  const toShow = !filter.trim() ? filtered.slice(0, 8) : filtered;
+  const hiddenCount = !filter.trim() && options.length > 8 ? options.length - 8 : 0;
+  return (
+    <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+      {showSearch && (
+        <>
+          <input
+            type="text"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder={lang === "es" ? "Buscar para ver más..." : "Search to see more..."}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 12,
+              border: `1px solid ${t.border}`,
+              background: t.mode === "dark" ? "rgba(15,23,42,0.5)" : "rgba(248,250,252,0.95)",
+              color: t.text,
+              fontSize: 14,
+              outline: "none",
+            }}
+          />
+          {hiddenCount > 0 && (
+            <div style={{ fontSize: 12, opacity: 0.8, color: t.textMuted || t.text }}>
+              {lang === "es" ? `+${hiddenCount} más. Busca para filtrar.` : `+${hiddenCount} more. Search to filter.`}
+            </div>
+          )}
+        </>
+      )}
+      {toShow.map((opt, displayIdx) => {
+        const origIdx = options.indexOf(opt);
+        return (
+          <button
+            key={`${messageId}-pick-${origIdx}`}
+            type="button"
+            style={{
+              ...pickStyles.option(t),
+              cursor: loading ? "not-allowed" : "pointer",
+              opacity: loading ? 0.6 : 1,
+            }}
+            onClick={() => onPickOption(opt, origIdx)}
+            disabled={loading}
+            title={cleanPickLabel(opt?.label || "")}
+          >
+            <div style={pickStyles.badge(t)}>{displayIdx + 1}</div>
+            <div style={{ ...pickStyles.name(t), flex: 1, whiteSpace: "normal", textOverflow: "unset" }}>
+              {cleanPickLabel(opt?.label || opt?.value || "") || "(sin nombre)"}
+            </div>
+            <div style={{ opacity: 0.7, fontWeight: 900 }}>›</div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 /** Limpia label para UI: SOLO nombre (sin correo, sin "·", sin repetición) */
 function cleanPickLabel(label = "") {
@@ -47,221 +109,6 @@ function cleanPickLabel(label = "") {
   s2 = s2.split("-")[0].trim();
   s2 = s2.replace(/\s+/g, " ").trim();
   return s2;
-}
-
-/* =========================
-   Firestore helpers
-   users/{uid}/conversations/{clientId}/messages/{autoId}
-========================= */
-
-function fsConversationDocRef(uid, clientId) {
-  return doc(db, "users", uid, "conversations", clientId);
-}
-
-function fsMessagesColRef(uid, clientId) {
-  return collection(db, "users", uid, "conversations", clientId, "messages");
-}
-
-async function upsertUserDoc(uid, data) {
-  if (!uid) return;
-  await setDoc(doc(db, "users", uid), data, { merge: true });
-}
-
-async function loadConversationsFromFirestore({ uid, max = 50 }) {
-  const _uid = String(uid || "").trim();
-  if (!_uid) return [];
-
-  const colRef = collection(db, "users", _uid, "conversations");
-  const q1 = query(colRef, orderBy("updatedAt", "desc"), limit(max));
-  const snap = await getDocs(q1);
-
-  const items = [];
-  snap.forEach((d) => {
-    const x = d.data() || {};
-    items.push({
-      clientId: d.id,
-      createdAt: x.createdAt || null,
-      updatedAt: x.updatedAt || null,
-      lastText: x.lastText || "",
-      lastFrom: x.lastFrom || "bot",
-      lastLang: x.lastLang || "en",
-    });
-  });
-
-  return items;
-}
-
-function toDateSafe(ts) {
-  if (!ts) return null;
-  if (typeof ts.toDate === "function") return ts.toDate();
-  const d = new Date(ts);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function startOfDay(d) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-function daysDiff(a, b) {
-  const A = startOfDay(a).getTime();
-  const B = startOfDay(b).getTime();
-  return Math.round((A - B) / (24 * 3600 * 1000));
-}
-
-function groupConversations(convs, lang) {
-  const now = new Date();
-  const out = new Map();
-
-  const label = (key) => {
-    const es = { today: "HOY", yesterday: "AYER", week: "ESTA SEMANA", month: "ESTE MES", older: "ANTERIORES" };
-    const en = { today: "TODAY", yesterday: "YESTERDAY", week: "THIS WEEK", month: "THIS MONTH", older: "OLDER" };
-    return (lang === "es" ? es : en)[key] || key;
-  };
-
-  for (const c of convs) {
-    const d = toDateSafe(c.updatedAt) || toDateSafe(c.createdAt) || null;
-
-    let key = "older";
-    if (d) {
-      const diff = daysDiff(now, d);
-      if (diff === 0) key = "today";
-      else if (diff === 1) key = "yesterday";
-      else if (diff <= 7) key = "week";
-      else if (now.getFullYear() === d.getFullYear() && now.getMonth() === d.getMonth()) key = "month";
-      else key = "older";
-    }
-
-    if (!out.has(key)) out.set(key, { title: label(key), items: [] });
-    out.get(key).items.push(c);
-  }
-
-  const order = ["today", "yesterday", "week", "month", "older"];
-  return order.filter((k) => out.has(k)).map((k) => out.get(k));
-}
-
-function fmtShortDate(ts, lang) {
-  const d = toDateSafe(ts);
-  if (!d) return "";
-  try {
-    return d.toLocaleDateString(lang === "es" ? "es-ES" : "en-US", { month: "short", day: "numeric" });
-  } catch {
-    return "";
-  }
-}
-
-/* Mensajería: hora + separadores por día */
-function fmtTime(ts, lang) {
-  const d = toDateSafe(ts);
-  if (!d) return "";
-  try {
-    return d.toLocaleTimeString(lang === "es" ? "es-ES" : "en-US", { hour: "2-digit", minute: "2-digit" });
-  } catch {
-    return "";
-  }
-}
-
-function dayKey(ts) {
-  const d = toDateSafe(ts);
-  if (!d) return null;
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x.getTime();
-}
-
-function fmtDayLabel(ts, lang) {
-  const d = toDateSafe(ts);
-  if (!d) return "";
-  const now = new Date();
-  const diff = daysDiff(now, d);
-
-  if (lang === "es") {
-    if (diff === 0) return "HOY";
-    if (diff === 1) return "AYER";
-    try {
-      return d.toLocaleDateString("es-ES", { month: "short", day: "numeric", year: "numeric" });
-    } catch {
-      return "";
-    }
-  } else {
-    if (diff === 0) return "TODAY";
-    if (diff === 1) return "YESTERDAY";
-    try {
-      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-    } catch {
-      return "";
-    }
-  }
-}
-
-async function saveMessageToFirestore({ uid, clientId, from, text, meta, lang }) {
-  try {
-    const _uid = String(uid || "").trim();
-    const _clientId = String(clientId || "").trim();
-    const _text = String(text || "").trim();
-
-    if (!_uid || !_clientId || !_text) return;
-
-    const convRef = fsConversationDocRef(_uid, _clientId);
-    const convSnap = await getDoc(convRef);
-
-    await setDoc(
-      convRef,
-      {
-        createdAt: convSnap.exists() ? convSnap.data()?.createdAt || serverTimestamp() : serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        lastLang: lang || "en",
-        lastText: _text.slice(0, 140),
-        lastFrom: from,
-      },
-      { merge: true }
-    );
-
-    const colRef = fsMessagesColRef(_uid, _clientId);
-    await addDoc(colRef, {
-      from,
-      text: _text,
-      lang: lang || "en",
-      meta: meta || null,
-      createdAt: serverTimestamp(),
-    });
-  } catch (e) {
-    console.error("[FS] saveMessage failed:", e);
-    throw e;
-  }
-}
-
-async function loadMessagesFromFirestore({ uid, clientId, max = 80 }) {
-  try {
-    const _uid = String(uid || "").trim();
-    const _clientId = String(clientId || "").trim();
-    if (!_uid || !_clientId) return [];
-
-    const colRef = fsMessagesColRef(_uid, _clientId);
-    const q2 = query(colRef, orderBy("createdAt", "asc"), limit(max));
-    const snap = await getDocs(q2);
-
-    const msgs = [];
-    snap.forEach((d) => {
-      const x = d.data() || {};
-      msgs.push({
-        id: d.id,
-        from: x.from || "bot",
-        text: x.text || "",
-        lang: x.lang || "en",
-        meta: x.meta || null,
-        expanded: false,
-        suggestions: Array.isArray(x?.meta?.suggestions) ? x.meta.suggestions : [],
-        createdAt: x.createdAt || null,
-      });
-    });
-
-    return msgs;
-  } catch (e) {
-    console.error("[FS] loadMessages failed:", e);
-    throw e;
-  }
 }
 
 export default function ChatPage() {
@@ -277,24 +124,24 @@ export default function ChatPage() {
   const [scopeUi, setScopeUi] = useState({ mode: "general", label: "General" });
 
   const [theme, setTheme] = useState(() => {
-    const saved = localStorage.getItem(THEME_KEY);
+    const saved = localStorage.getItem(STORAGE_KEYS.THEME);
     return saved === "light" ? "light" : "dark";
   });
 
   const [lang, setLang] = useState(() => {
-    const saved = localStorage.getItem(LANG_KEY);
+    const saved = localStorage.getItem(STORAGE_KEYS.LANG);
     return saved === "es" ? "es" : "en";
   });
 
   const [clientId, setClientId] = useState(() => {
-    const saved = localStorage.getItem(CLIENT_ID_KEY);
+    const saved = localStorage.getItem(STORAGE_KEYS.CLIENT_ID);
     if (saved) return saved;
     const id = makeId();
-    localStorage.setItem(CLIENT_ID_KEY, id);
+    localStorage.setItem(STORAGE_KEYS.CLIENT_ID, id);
     return id;
   });
 
-  const [userName, setUserName] = useState(() => readStoredName(USER_NAME_KEY));
+  const [userName, setUserName] = useState(() => readStoredName(STORAGE_KEYS.USER_NAME));
   const [askNameOpen, setAskNameOpen] = useState(false);
 
   // Header menu (⋯)
@@ -348,7 +195,7 @@ export default function ChatPage() {
             const last = usnap.exists() ? usnap.data()?.lastClientId : null;
 
             if (last && String(last).trim() && last !== clientId) {
-              localStorage.setItem(CLIENT_ID_KEY, last);
+              localStorage.setItem(STORAGE_KEYS.CLIENT_ID, last);
               setClientId(last);
             }
           } catch (e) {
@@ -361,7 +208,7 @@ export default function ChatPage() {
           await upsertUserDoc(fbUser.uid, {
             email: fbUser.email || null,
             lastSeenAt: serverTimestamp(),
-            lastClientId: localStorage.getItem(CLIENT_ID_KEY) || clientId,
+            lastClientId: localStorage.getItem(STORAGE_KEYS.CLIENT_ID) || clientId,
             updatedAt: serverTimestamp(),
           });
         } catch (e) {
@@ -370,7 +217,7 @@ export default function ChatPage() {
 
         // nombre
         const email = (fbUser.email || "").trim().toLowerCase();
-        const saved = readStoredName(USER_NAME_KEY);
+        const saved = readStoredName(STORAGE_KEYS.USER_NAME);
 
         if (saved) {
           setUserName(saved);
@@ -379,7 +226,7 @@ export default function ChatPage() {
           try {
             const r = await resolveUserNameByEmail(email);
             if (r?.ok && r?.found && r?.name) {
-              localStorage.setItem(USER_NAME_KEY, r.name);
+              localStorage.setItem(STORAGE_KEYS.USER_NAME, r.name);
               setUserName(r.name);
               setAskNameOpen(false);
             } else {
@@ -404,13 +251,14 @@ export default function ChatPage() {
   const t = useMemo(() => makeTheme(theme), [theme]);
 
   const ui = useMemo(() => {
-    const name = userName ? `, ${userName}` : "";
+    const first = userName ? String(userName).trim().split(/\s+/)[0] : "";
+    const namePart = first ? ` ${first}` : "";
     if (lang === "es") {
       return {
         welcome:
-          `Hola${name} 👋 Soy Nexus.\n` +
-          `¿Qué quieres revisar hoy?\n` +
-          `(confirmed/dropped/problem/credit y links de logs/PDF).`,
+          `¡Hola${namePart}! 👋 Soy Nexus, tu asistente de datos.\n\n` +
+          `¿En qué puedo ayudarte hoy? Puedes preguntar por confirmed, dropped, problem, crédito o links de logs/PDF.\n\n` +
+          `Puedes elegir un filtro (scope) arriba para enfocar las consultas por oficina, equipo, director, submitter u otra dimensión.`,
         placeholder: "Escribe aquí…",
         online: "Online",
         more: "Ver más",
@@ -433,9 +281,9 @@ export default function ChatPage() {
     }
     return {
       welcome:
-        `Hi${name} 👋 I’m Nexus.\n` +
-        `What do you want to review today?\n` +
-        `(confirmed/dropped/problem/credit and logs/PDF links).`,
+        `Hey${namePart}! 👋 I'm Nexus, your data assistant.\n\n` +
+        `How can I help you today? Ask about confirmed, dropped, problem, credit, or log/PDF links.\n\n` +
+        `You can select a scope filter above to focus queries by office, team, director, submitter, or other dimensions.`,
       placeholder: "Type here…",
       online: "Online",
       more: "Show more",
@@ -477,6 +325,8 @@ export default function ChatPage() {
 
   const [showAllPrompts, setShowAllPrompts] = useState(false);
   const [pendingPick, setPendingPick] = useState(null);
+  const [pickSearchFilter, setPickSearchFilter] = useState("");
+  const [collapsedDays, setCollapsedDays] = useState(new Set());
 
   const refreshConversations = async (opts = {}) => {
     if (!uid) return;
@@ -560,8 +410,8 @@ export default function ChatPage() {
     return [...base, { label: showAllPrompts ? ui.less : ui.more, __toggle: true }];
   }, [quickPrompts, showAllPrompts, ui.more, ui.less]);
 
-  useEffect(() => localStorage.setItem(THEME_KEY, theme), [theme]);
-  useEffect(() => localStorage.setItem(LANG_KEY, lang), [lang]);
+  useEffect(() => localStorage.setItem(STORAGE_KEYS.THEME, theme), [theme]);
+  useEffect(() => localStorage.setItem(STORAGE_KEYS.LANG, lang), [lang]);
 
   // autoscroll inteligente + unread
   const handleListScroll = () => {
@@ -578,7 +428,6 @@ export default function ChatPage() {
     if (!el) return;
     el.addEventListener("scroll", handleListScroll, { passive: true });
     return () => el.removeEventListener("scroll", handleListScroll);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -602,14 +451,20 @@ export default function ChatPage() {
     setIsNearBottom(true);
   };
 
-  // Cerrar menú con ESC (pro)
+  // Cerrar menú y modal de scope con ESC
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === "Escape") setMenuOpen(false);
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        if (pendingPick?.options?.length && !loading) {
+          setPendingPick(null);
+          setPickSearchFilter("");
+        }
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [pendingPick?.options?.length, loading]);
 
   const pushBotError = (text) =>
     setMessages((prev) => [...prev, { id: makeId(), from: "bot", text, createdAt: Date.now() }]);
@@ -622,7 +477,7 @@ export default function ChatPage() {
     const n = String(name || "").trim();
     if (!n) return;
 
-    localStorage.setItem(USER_NAME_KEY, n);
+    localStorage.setItem(STORAGE_KEYS.USER_NAME, n);
     setUserName(n);
     setAskNameOpen(false);
 
@@ -677,10 +532,22 @@ export default function ChatPage() {
     setLoading(true);
 
     try {
-      const data = await sendChatMessage(trimmed, lang, clientId, userName, options?.preset);
+      const meta = {
+        ...(options?.preset ? { preset: options.preset } : {}),
+        ...(scopeUi?.label && scopeUi.label !== "General" ? { scope: scopeUi } : {}),
+      };
+      const data = await sendChatMessage(
+        trimmed,
+        lang,
+        clientId,
+        userName,
+        options?.preset,
+        Object.keys(meta).length ? meta : null
+      );
 
       if (data?.ok) {
-        setPendingPick(data.pick || null);
+        // Solo popup para scope type (General, Office, POD...). Candidatos (person, attorney, etc.) van en el chat
+        setPendingPick(data.pick?.type === "scope_type" ? data.pick : null);
 
         // actualizar scope en UI si backend lo envía
         if (data?.scope?.label) setScopeUi(data.scope);
@@ -695,7 +562,14 @@ export default function ChatPage() {
           cards: Array.isArray(data.cards) ? data.cards : null,
           aiComment: data.aiComment || null,
           preset: options?.preset || null,
-          scope: data.scope || null, // ✅ NUEVO: persistir scope
+          scope: data.scope || null,
+          pick: data.pick || null,
+          mode: data.mode || null,
+          logsPreview: Array.isArray(data.logsPreview) ? data.logsPreview : null,
+          logsPdfLink: data.logsPdfLink || null,
+          peerComparison: data.peerComparison || null,
+          analysisText: data.analysisText || null,
+          performanceDiagnosis: data.performanceDiagnosis || null,
         };
 
         const botMsg = {
@@ -742,6 +616,7 @@ export default function ChatPage() {
   const onPickOption = async (opt, index) => {
     if (loading) return;
 
+    // Enviar índice 1-based ("1", "2"...) Y value como fallback para que el backend resuelva
     const msg = String(index + 1);
     setMessages((prev) => [...prev, { id: makeId(), from: "user", text: msg, createdAt: Date.now() }]);
 
@@ -762,7 +637,12 @@ export default function ChatPage() {
 
     setLoading(true);
     try {
-      const data = await sendChatMessage(msg, lang, clientId, userName);
+      // Enviamos índice 1-based + value/label en meta para que el backend resuelva el pick
+      const meta = { pick: true, pickIndex: index, pickedIndex: index + 1, pickValue: opt?.value || opt?.label };
+      if (import.meta.env.DEV) {
+        console.log("[ChatPage] onPickOption envía msg=", msg, "clientId=", clientId, "meta=", meta);
+      }
+      const data = await sendChatMessage(msg, lang, clientId, userName, null, meta);
 
       if (data?.ok) {
         // actualizar scope en UI si backend lo envía (también en picks)
@@ -777,7 +657,14 @@ export default function ChatPage() {
           cards: Array.isArray(data.cards) ? data.cards : null,
           aiComment: data.aiComment || null,
           preset: null,
-          scope: data.scope || null, // ✅ NUEVO: persistir scope
+          scope: data.scope || null,
+          pick: data.pick || null,
+          mode: data.mode || null,
+          logsPreview: Array.isArray(data.logsPreview) ? data.logsPreview : null,
+          logsPdfLink: data.logsPdfLink || null,
+          peerComparison: data.peerComparison || null,
+          analysisText: data.analysisText || null,
+          performanceDiagnosis: data.performanceDiagnosis || null,
         };
 
         setMessages((prev) => [
@@ -793,7 +680,8 @@ export default function ChatPage() {
           },
         ]);
 
-        setPendingPick(data.pick || null);
+        // Solo popup para scope type. Candidatos van en el chat (con opciones clicables)
+        setPendingPick(data.pick?.type === "scope_type" ? data.pick : null);
 
         if (uid) {
           saveMessageToFirestore({
@@ -842,7 +730,7 @@ export default function ChatPage() {
 
   const startNewChat = () => {
     const id = makeId();
-    localStorage.setItem(CLIENT_ID_KEY, id);
+    localStorage.setItem(STORAGE_KEYS.CLIENT_ID, id);
     historyLoadedRef.current = false;
     setClientId(id);
     setDrawerOpen(false);
@@ -856,7 +744,7 @@ export default function ChatPage() {
 
   const openConversation = (cid) => {
     if (!cid) return;
-    localStorage.setItem(CLIENT_ID_KEY, cid);
+    localStorage.setItem(STORAGE_KEYS.CLIENT_ID, cid);
     setClientId(cid);
     setDrawerOpen(false);
     setUnreadCount(0);
@@ -1144,6 +1032,48 @@ export default function ChatPage() {
           background: ${t.mode === "dark" ? "rgba(148,163,184,0.14)" : "rgba(15,23,42,0.08)"};
           margin: 10px 0;
         }
+
+        .scope-pill:hover {
+          border-color: ${t.mode === "dark" ? "rgba(148,163,184,0.25)" : "rgba(15,23,42,0.15)"} !important;
+          background: ${t.mode === "dark" ? "rgba(30,41,59,0.6)" : "rgba(241,245,249,0.9)"} !important;
+        }
+        .scope-pill.filtering:hover {
+          border-color: ${t.mode === "dark" ? "rgba(56,189,248,0.5)" : "rgba(59,130,246,0.45)"} !important;
+          background: ${t.mode === "dark" ? "rgba(56,189,248,0.16)" : "rgba(59,130,246,0.12)"} !important;
+        }
+
+        .quick-chip:hover {
+          transform: translateY(-1px);
+          border-color: ${t.mode === "dark" ? "rgba(148,163,184,0.25)" : "rgba(15,23,42,0.12)"} !important;
+          background: ${t.mode === "dark" ? "rgba(30,41,59,0.6)" : "rgba(226,232,240,0.8)"} !important;
+        }
+
+        .input-wrap:focus-within {
+          border-color: ${t.mode === "dark" ? "rgba(59,130,246,0.4)" : "rgba(59,130,246,0.35)"} !important;
+          box-shadow: ${t.mode === "dark" ? "0 0 0 3px rgba(59,130,246,0.15)" : "0 0 0 3px rgba(59,130,246,0.12)"} !important;
+        }
+
+        .day-separator {
+          display: flex;
+          justify-content: center;
+          margin: 16px 0 12px;
+        }
+        .day-separator span {
+          padding: 6px 14px;
+          border-radius: 10px;
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: ${t.textMuted};
+          background: ${t.mode === "dark" ? "rgba(15,23,42,0.5)" : "rgba(255,255,255,0.9)"};
+          border: 1px solid ${t.border};
+        }
+
+        @media (max-width: 480px) {
+          .header-online { display: none; }
+          .header-scope-pill { max-width: 140px !important; }
+        }
       `}</style>
 
       <div style={s.page(t)}>
@@ -1295,51 +1225,57 @@ export default function ChatPage() {
                 </button>
 
          
-                <div style={s.avatar(t)}>
-                  <button
-                    type="button"
-                    onClick={() => navigate("/dashboard")}
-                    title={lang === "es" ? "Ir al dashboard" : "Go to dashboard"}
-                    style={{
-                      border: "none",
-                      background: "transparent",
-                      padding: 0,
-                      cursor: "pointer",
-                      display: "grid",
-                    }}
-                  >
-                    <div style={s.avatar(t)}>
-                      <img src={logoAvatar} alt="305 No Fault" style={s.avatarLogo} />
-                    </div>
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate("/dashboard")}
+                  title={lang === "es" ? "Ir al dashboard" : "Go to dashboard"}
+                  style={{
+                    border: "none",
+                    background: "transparent",
+                    padding: 0,
+                    cursor: "pointer",
+                    display: "flex",
+                    flexShrink: 0,
+                  }}
+                >
+                  <div style={s.avatar(t)}>
+                    <img src={logoAvatar} alt="305 No Fault" style={s.avatarLogo} />
+                  </div>
+                </button>
 
-                <div style={{ lineHeight: 1.05, minWidth: 0 }}>
+                <div style={s.headerTitleBlock}>
                   <div style={s.title(t)}>Nexus Assistant</div>
-                  <div style={s.subTitle(t)}>305 No Fault{userName ? ` · ${userName}` : ""}</div>
+                  <div style={s.subTitle(t)} title={userName ? `${userName} · 305 No Fault` : "305 No Fault"}>
+                    {userName ? `${userName} · 305 No Fault` : "305 No Fault"}
+                  </div>
                 </div>
               </div>
 
               <div style={s.headerRight}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, position: "relative" }}>
-                  <div style={s.pill(t)}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
+                  <div className="header-online" style={s.pill(t)}>
                     <span style={s.dotOnline} />
                     <span style={s.pillText(t)}>{ui.online}</span>
                   </div>
 
                   <button
                     type="button"
+                    className={`scope-pill header-scope-pill ${(scopeUi?.filtering || (scopeUi?.label && scopeUi.label.includes(":"))) ? "filtering" : ""}`}
                     onClick={() => handleSendText(lang === "es" ? "Cambiar filtro" : "Change scope")}
                     style={{
                       ...s.pill(t),
                       cursor: "pointer",
                       maxWidth: 320,
                       overflow: "hidden",
+                      ...((scopeUi?.filtering || (scopeUi?.label && scopeUi.label.includes(":"))) && {
+                        borderColor: t.mode === "dark" ? "rgba(56,189,248,0.4)" : "rgba(59,130,246,0.4)",
+                        background: t.mode === "dark" ? "rgba(56,189,248,0.12)" : "rgba(59,130,246,0.08)",
+                      }),
                     }}
-                    title={lang === "es" ? "Cambiar filtro/alcance" : "Change filter/scope"}
+                    title={scopeUi?.changeHint || (lang === "es" ? "Cambiar filtro/alcance" : "Change filter/scope")}
                   >
                     <span style={s.pillText(t)}>
-                      📌 {lang === "es" ? "Filtro:" : "Scope:"}{" "}
+                      {(scopeUi?.filtering || (scopeUi?.label && scopeUi.label.includes(":"))) ? "🔍" : "📌"} {lang === "es" ? "Filtro:" : "Scope:"}{" "}
                       {scopeUi?.label || (lang === "es" ? "General" : "General")}
                     </span>
                   </button>
@@ -1399,37 +1335,18 @@ export default function ChatPage() {
                 const showDay = dk && dk !== lastDay;
                 if (showDay) lastDay = dk;
 
-                 const hasCards = Array.isArray(m?.meta?.cards) && m.meta.cards.length > 0;
-                const hasChart = !!m?.meta?.chart;
-                const hasLinks = !!m?.meta?.links;
+                const isLogsReview = !isUser && m?.meta?.mode === "logs_performance_review";
+                const hasCards = !isLogsReview && Array.isArray(m?.meta?.cards) && m.meta.cards.length > 0;
+                const hasChart = !isLogsReview && !!m?.meta?.chart;
+                const hasLinks = !isLogsReview && !!m?.meta?.links;
 
-               const rawPickPrompt = !isUser && isPickPromptMessage(idx);
+                const rawPickPrompt = !isUser && isPickPromptMessage(idx);
 
                 return (
                   <React.Fragment key={m.id}>
                     {showDay && (
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "center",
-                          margin: "10px 0 6px",
-                          color: t.textMuted,
-                          fontWeight: 900,
-                          fontSize: 11,
-                          letterSpacing: ".18em",
-                        }}
-                      >
-                        <span
-                          style={{
-                            padding: "6px 10px",
-                            border: `1px solid ${t.border}`,
-                            borderRadius: 999,
-                            background: t.mode === "dark" ? "rgba(2,6,23,0.35)" : "rgba(255,255,255,0.80)",
-                            backdropFilter: "blur(8px)",
-                          }}
-                        >
-                          {fmtDayLabel(m.createdAt, lang)}
-                        </span>
+                      <div className="day-separator">
+                        <span>{fmtDayLabel(m.createdAt, lang)}</span>
                       </div>
                     )}
 
@@ -1444,7 +1361,38 @@ export default function ChatPage() {
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             {/* ✅ BLOQUES (cards/chart/links) primero: sensación “dashboard-like” */}
-                            {!isUser && (hasCards || hasChart || hasLinks) ? (
+                            {isLogsReview ? (
+                              <>
+                                <LogsReviewLayout
+                                meta={{
+                                  logsPdfLink: m.meta.logsPdfLink,
+                                  logsPreview: m.meta.logsPreview,
+                                  peerComparison: m.meta.peerComparison,
+                                  analysisText: m.meta.analysisText,
+                                  performanceDiagnosis: m.meta.performanceDiagnosis,
+                                }}
+                                  text={m.text}
+                                  t={t}
+                                  lang={lang}
+                                />
+                                {Array.isArray(m?.suggestions) && m.suggestions.length > 0 && (
+                                  <div style={{ ...s.suggestionsRow(t), marginTop: 12 }}>
+                                    {m.suggestions.map((suggText, i) => (
+                                      <button
+                                        key={`${m.id}-sugg-${i}`}
+                                        style={s.suggestionChip(t)}
+                                        onClick={() => handleSendText(suggText)}
+                                        title={suggText}
+                                      >
+                                        ✨ {suggText}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                            {(hasCards || hasChart || hasLinks) ? (
                               <div className="meta-stack">
                                 {hasCards ? <CardsBlock cards={m.meta.cards} t={t} /> : null}
                                 {hasChart ? <MiniChart chart={m.meta.chart} t={t} lang={lang} /> : null}
@@ -1456,15 +1404,34 @@ export default function ChatPage() {
                             <div style={s.messageText(t, isUser)}>
                               {!isUser ? (
                                 <>
-                                  {rawPickPrompt ? (
-                                    <div style={{ whiteSpace: "pre-wrap" }}>{m.text}</div>
-                                  ) : long && !expanded ? (
-                                    <div style={clampStyle(4)}>{m.text}</div>
-                                  ) : (
-                                    <BotPrettyAnswer text={m.text} t={t} lang={lang} />
-                                  )}
+                                  {(() => {
+                                    const hasPickOptions = m?.meta?.pick?.options?.length > 0 && m?.meta?.pick?.type !== "scope_type";
+                                    const displayText = hasPickOptions
+                                      ? String(m.text || "").split(/\n\n\d+\)/)[0].trim()
+                                      : m.text;
+                                    return rawPickPrompt ? (
+                                      <div style={{ whiteSpace: "pre-wrap" }}>{displayText}</div>
+                                    ) : hasPickOptions ? (
+                                      <BotPrettyAnswer text={displayText} t={t} lang={lang} />
+                                    ) : long && !expanded ? (
+                                      <div style={clampStyle(4)}>{m.text}</div>
+                                    ) : (
+                                      <BotPrettyAnswer text={m.text} t={t} lang={lang} />
+                                    );
+                                  })()}
 
-                                  {/* ✅ Suggestions siempre al final, para no competir con KPIs/Chart */}
+                                  {/* ✅ Opciones clicables con búsqueda cuando hay muchas */}
+                                  {!isUser && m?.meta?.pick?.options?.length > 0 && m?.meta?.pick?.type !== "scope_type" && (
+                                    <PickOptionsWithSearch
+                                      options={m.meta.pick.options}
+                                      messageId={m.id}
+                                      onPickOption={onPickOption}
+                                      loading={loading}
+                                      t={t}
+                                      lang={lang}
+                                    />
+                                  )}
+                                  {/* ✅ Suggestions siempre al final */}
                                   {Array.isArray(m?.suggestions) && m.suggestions.length > 0 && (
                                     <div style={s.suggestionsRow(t)}>
                                       {m.suggestions.map((text, i) => (
@@ -1484,6 +1451,8 @@ export default function ChatPage() {
                                 <div style={{ whiteSpace: "pre-wrap" }}>{m.text}</div>
                               )}
                             </div>
+                              </>
+                            )}
                           </div>
 
                           <div style={{ fontSize: 11, fontWeight: 900, opacity: 0.6, whiteSpace: "nowrap" }}>
@@ -1503,63 +1472,6 @@ export default function ChatPage() {
                   </React.Fragment>
                 );
               })}
-
-              {pendingPick?.options?.length > 0 && (
-                <div style={s.rowBot} className="msg-in">
-                  <div style={s.bubbleAvatar(t)}>
-                    <img src={logoAvatar} alt="Nexus" style={s.bubbleLogo} />
-                  </div>
-
-                  <div style={{ ...s.bubbleBot(t), padding: 0, background: "transparent", border: "none" }}>
-                    <div style={pickStyles.wrapInline(t)}>
-                      <div style={pickStyles.title(t)}>{ui.pickTitle}</div>
-
-                      <div style={pickStyles.grid}>
-                        {pendingPick.options.map((opt, idx) => {
-                          const onlyName = cleanPickLabel(opt?.label || "");
-                          return (
-                            <button
-                              key={`${opt.id || opt.label}-${idx}`}
-                              type="button"
-                              onClick={() => onPickOption(opt, idx)}
-                              disabled={loading}
-                              style={{
-                                ...pickStyles.option(t),
-                                opacity: loading ? 0.6 : 1,
-                                cursor: loading ? "not-allowed" : "pointer",
-                              }}
-                              title={onlyName}
-                            >
-                              <div style={pickStyles.badge(t)}>{idx + 1}</div>
-
-                              <div style={{ minWidth: 0, flex: 1 }}>
-                                <div style={pickStyles.name(t)}>{onlyName || "(sin nombre)"}</div>
-                              </div>
-
-                              <div style={{ opacity: 0.7, fontWeight: 900 }}>›</div>
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      <div style={pickStyles.footer}>
-                        <button
-                          type="button"
-                          disabled={loading}
-                          onClick={() => setPendingPick(null)}
-                          style={{
-                            ...pickStyles.cancel(t),
-                            opacity: loading ? 0.6 : 1,
-                            cursor: loading ? "not-allowed" : "pointer",
-                          }}
-                        >
-                          {ui.pickCancel}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {loading && (
                 <div style={s.rowBot} className="msg-in">
@@ -1582,6 +1494,7 @@ export default function ChatPage() {
                     <button
                       key={item.label}
                       type="button"
+                      className="quick-chip"
                       onClick={() => onQuick(item)}
                       style={s.suggestChip(t, !!item.__toggle)}
                       disabled={loading}
@@ -1594,8 +1507,41 @@ export default function ChatPage() {
               </div>
             )}
 
+            {/* Indicador visible de filtro activo: mostrar siempre que haya scope focus, aunque no haya valor aún */}
+            {scopeUi?.mode === "focus" ? (
+              <button
+                type="button"
+                onClick={() => handleSendText(lang === "es" ? "Cambiar filtro" : "Change scope")}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  width: "100%",
+                  padding: "8px 14px",
+                  margin: "0 12px 6px",
+                  borderRadius: 12,
+                  border: `1px solid ${t.mode === "dark" ? "rgba(56,189,248,0.35)" : "rgba(59,130,246,0.35)"}`,
+                  background: t.mode === "dark" ? "rgba(56,189,248,0.12)" : "rgba(59,130,246,0.10)",
+                  color: t.text,
+                  fontSize: 12,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  textAlign: "center",
+                }}
+                title={scopeUi?.changeHint || (lang === "es" ? "Click para cambiar filtro" : "Click to change filter")}
+              >
+                <span style={{ opacity: 0.9 }}>🔍</span>
+                <span>{lang === "es" ? "Filtrando por:" : "Filtering by:"}</span>
+                <span style={{ fontWeight: 950, color: t.mode === "dark" ? "rgba(125,211,252,0.95)" : "rgba(37,99,235,0.95)" }}>
+                  {scopeUi?.badge || scopeUi?.label}
+                </span>
+                <span style={{ fontSize: 10, opacity: 0.7 }}>· {lang === "es" ? "click para cambiar" : "click to change"}</span>
+              </button>
+            ) : null}
+
             <form onSubmit={onSubmit} style={s.composer(t)}>
-              <div style={s.inputWrap(t)}>
+              <div className="input-wrap" style={s.inputWrap(t)}>
                 <textarea
                   className="chat-input"
                   value={input}
@@ -1649,6 +1595,99 @@ export default function ChatPage() {
         </div>
 
         {askNameOpen && <NameModal t={t} lang={lang} onSave={saveUserName} onSkip={() => setAskNameOpen(false)} />}
+
+        {pendingPick?.options?.length > 0 && (
+          <div
+            style={s.modalOverlay(t)}
+            onClick={(e) => { if (e.target === e.currentTarget && !loading) { setPendingPick(null); setPickSearchFilter(""); } }}
+          >
+            <div style={pickStyles.modalCard(t)} onClick={(e) => e.stopPropagation()}>
+              <div style={pickStyles.modalHeader(t)}>
+                <span style={pickStyles.modalTitle(t)}>{ui.pickTitle}</span>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => { setPendingPick(null); setPickSearchFilter(""); }}
+                  style={pickStyles.cancelSmall(t)}
+                  title={ui.pickCancel}
+                >
+                  ✕
+                </button>
+              </div>
+              {pendingPick.type !== "scope_type" && pendingPick.options.length > 8 && (
+                <div style={{ padding: "8px 16px 12px", flexShrink: 0 }}>
+                  <input
+                    type="text"
+                    value={pickSearchFilter}
+                    onChange={(e) => setPickSearchFilter(e.target.value)}
+                    placeholder={lang === "es" ? "Buscar para ver más..." : "Search to see more..."}
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      borderRadius: 12,
+                      border: `1px solid ${t.border}`,
+                      background: t.mode === "dark" ? "rgba(15,23,42,0.5)" : "rgba(248,250,252,0.95)",
+                      color: t.text,
+                      fontSize: 14,
+                      outline: "none",
+                    }}
+                    autoFocus
+                  />
+                  {!pickSearchFilter.trim() && pendingPick.options.length > 8 && (
+                    <div style={{ fontSize: 12, opacity: 0.8, marginTop: 6, color: t.textMuted || t.text }}>
+                      {lang === "es" ? `+${pendingPick.options.length - 8} más. Busca para filtrar.` : `+${pendingPick.options.length - 8} more. Search to filter.`}
+                    </div>
+                  )}
+                </div>
+              )}
+              <div style={pickStyles.modalGrid}>
+                {(() => {
+                  const filtered = !pickSearchFilter.trim()
+                    ? pendingPick.options
+                    : pendingPick.options.filter((opt) =>
+                        cleanPickLabel(opt?.label || opt?.value || "").toLowerCase().includes(pickSearchFilter.trim().toLowerCase())
+                      );
+                  const useLimit = pendingPick.type !== "scope_type" && !pickSearchFilter.trim() && pendingPick.options.length > 8;
+                  const toShow = useLimit ? filtered.slice(0, 8) : filtered;
+                  return toShow.map((opt, displayIdx) => {
+                  const origIdx = pendingPick.options.indexOf(opt);
+                  const onlyName = cleanPickLabel(opt?.label || "");
+                  return (
+                    <button
+                      key={`${opt.id || opt.label}-${origIdx}`}
+                      type="button"
+                      onClick={() => onPickOption(opt, origIdx)}
+                      disabled={loading}
+                      style={{
+                        ...pickStyles.option(t),
+                        opacity: loading ? 0.6 : 1,
+                        cursor: loading ? "not-allowed" : "pointer",
+                      }}
+                      title={onlyName}
+                    >
+                      <div style={pickStyles.badge(t)}>{displayIdx + 1}</div>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={pickStyles.name(t)}>{onlyName || "(sin nombre)"}</div>
+                      </div>
+                      <div style={{ opacity: 0.7, fontWeight: 900 }}>›</div>
+                    </button>
+                  );
+                });
+                })()}
+              </div>
+              <div style={pickStyles.modalFooter(t)}>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => { setPendingPick(null); setPickSearchFilter(""); }}
+                  style={pickStyles.cancel(t)}
+                >
+                  {ui.pickCancel}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
        {menuOpen ? (
@@ -1730,13 +1769,55 @@ function menuItemStyle(t) {
 
 
 const pickStyles = {
-  wrapInline: (t) => ({
-    margin: 0,
-    padding: "12px 12px",
-    borderRadius: 14,
-    border: t.mode === "dark" ? "1px solid rgba(148,163,184,0.18)" : "1px solid rgba(15,23,42,0.10)",
-    background: t.mode === "dark" ? "rgba(2,6,23,0.35)" : "rgba(255,255,255,0.85)",
-    backdropFilter: "blur(8px)",
+  modalCard: (t) => ({
+    width: "min(440px, 92vw)",
+    maxHeight: "min(70vh, 400px)",
+    display: "flex",
+    flexDirection: "column",
+    borderRadius: 18,
+    background: t.surface,
+    border: `1px solid ${t.border}`,
+    boxShadow: t.mode === "dark" ? "0 25px 60px rgba(0,0,0,0.60)" : "0 25px 60px rgba(15,23,42,0.18)",
+    overflow: "hidden",
+  }),
+  modalHeader: (t) => ({
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    padding: "16px 16px 12px",
+    borderBottom: `1px solid ${t.border}`,
+    flexShrink: 0,
+  }),
+  modalTitle: (t) => ({
+    fontWeight: 900,
+    fontSize: 14,
+    color: t.text,
+  }),
+  modalGrid: {
+    padding: 12,
+    overflowY: "auto",
+    display: "grid",
+    gap: 8,
+    flex: 1,
+    minHeight: 0,
+  },
+  modalFooter: (t) => ({
+    display: "flex",
+    justifyContent: "flex-end",
+    padding: "12px 16px 16px",
+    borderTop: `1px solid ${t.border}`,
+  }),
+  cancelSmall: (t) => ({
+    padding: "6px 10px",
+    borderRadius: 999,
+    border: `1px solid ${t.border}`,
+    background: t.surface2,
+    color: t.textMuted,
+    fontSize: 12,
+    fontWeight: 900,
+    cursor: "pointer",
+    flexShrink: 0,
   }),
   title: (t) => ({
     fontWeight: 900,
@@ -1792,77 +1873,3 @@ const pickStyles = {
   }),
 };
 
-function CardsBlock({ cards, t }) {
-  return (
-    <div style={{ marginTop: 0, display: "grid", gap: 10 }}>
-      {cards.map((c, idx) => {
-        const icon = c?.icon || "ℹ️";
-        const title = String(c?.title || "").trim();
-        const type = String(c?.type || "").toLowerCase();
-
-        const box = {
-          borderRadius: 14,
-          border: `1px solid ${t.mode === "dark" ? "rgba(148,163,184,0.18)" : "rgba(15,23,42,0.10)"}`,
-          background: t.mode === "dark" ? "rgba(2,6,23,0.26)" : "rgba(255,255,255,0.72)",
-          padding: "10px 12px",
-          backdropFilter: "blur(8px)",
-        };
-
-        const header = {
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          fontWeight: 950,
-          fontSize: 12,
-          color: t.text,
-          letterSpacing: 0.2,
-          marginBottom: 6,
-        };
-
-        const iconStyle = {
-          width: 30,
-          height: 30,
-          borderRadius: 12,
-          display: "grid",
-          placeItems: "center",
-          border: `1px solid ${t.mode === "dark" ? "rgba(148,163,184,0.25)" : t.border}`,
-          background: t.mode === "dark" ? "rgba(30,41,59,0.45)" : "rgba(248,250,252,0.92)",
-          fontSize: 16,
-          flex: "0 0 auto",
-        };
-
-        const body = {
-          fontWeight: 800,
-          fontSize: 12,
-          color: t.mode === "dark" ? "rgba(226,232,240,0.92)" : "rgba(15,23,42,0.88)",
-          lineHeight: 1.35,
-          whiteSpace: "pre-wrap",
-        };
-
-        return (
-          <div key={`${type}-${idx}`} style={box}>
-            <div style={header}>
-              <div style={iconStyle}>{icon}</div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 950 }}>{title || "Info"}</div>
-              </div>
-            </div>
-
-            {Array.isArray(c?.lines) && c.lines.length > 0 ? (
-              <div style={{ display: "grid", gap: 4 }}>
-                {c.lines.map((ln, i) => (
-                  <div key={i} style={body}>
-                    • {ln}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={body}>{String(c?.text || "").trim()}</div>
-            )}
-          </div>
-        );
-      })}
-    </div>
- 
-);
-}

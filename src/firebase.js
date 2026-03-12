@@ -12,8 +12,9 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-console.log("[FIREBASE] projectId =", firebaseConfig.projectId);
-console.log("[FIREBASE] authDomain =", firebaseConfig.authDomain);
+if (import.meta.env.DEV) {
+  console.log("[FIREBASE] projectId =", firebaseConfig.projectId, "authDomain =", firebaseConfig.authDomain);
+}
 
 // Auth
 export const auth = getAuth(app);

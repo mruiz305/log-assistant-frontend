@@ -2,7 +2,7 @@ import React from 'react';
 import s from '../styles';
 import { splitLines, classifyLine } from '../utils';
 
-function BotPrettyAnswer({ text, t, lang }) {
+function BotPrettyAnswer({ text, t, lang, showHeader = true }) {
   const lines = splitLines(text);
 
   const bulletLines = lines
@@ -18,7 +18,7 @@ function BotPrettyAnswer({ text, t, lang }) {
 
   return (
     <div style={s.botAnswerWrap(t)}>
-      <div style={s.botAnswerHeader(t)}>{lang === 'es' ? 'Resumen' : 'Summary'}</div>
+      {showHeader && <div style={s.botAnswerHeader(t)}>{lang === 'es' ? 'Resumen' : 'Summary'}</div>}
 
       <div style={s.botAnswerList(t)}>
         {bulletLines.map((line, idx) => {

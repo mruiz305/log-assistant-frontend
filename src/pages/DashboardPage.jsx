@@ -13,19 +13,8 @@ import { signOut } from "firebase/auth";
 import { resolveUserNameByEmail } from "../api";
 import { fetchMonthlyDashboard } from "../api";
 
-const THEME_KEY = "log_assistant_theme";
-const LANG_KEY = "log_assistant_lang";
-const CLIENT_ID_KEY = "log_assistant_client_id";
-const USER_NAME_KEY = "log_assistant_user_name";
-
-function makeId() {
-  return Math.random().toString(16).slice(2) + Date.now().toString(16);
-}
-
-function readStoredName(key) {
-  const raw = localStorage.getItem(key);
-  return String(raw || "").trim();
-}
+import { STORAGE_KEYS } from "../constants";
+import { makeId, readStoredName } from "../chat/utils";
 
 /** Extrae métricas desde el texto del summary (fallback, sin tocar backend). */
 function parseKpisFromSummary(text = "") {
@@ -239,25 +228,25 @@ export default function DashboardPage() {
   const nav = useNavigate();
 
   const [theme, setTheme] = useState(() => {
-    const saved = localStorage.getItem(THEME_KEY);
+    const saved = localStorage.getItem(STORAGE_KEYS.THEME);
     return saved === "light" ? "light" : "dark";
   });
 
   const [lang, setLang] = useState(() => {
-    const saved = localStorage.getItem(LANG_KEY);
+    const saved = localStorage.getItem(STORAGE_KEYS.LANG);
     return saved === "es" ? "es" : "en";
   });
 
   // eslint-disable-next-line no-unused-vars
   const [clientId] = useState(() => {
-    const saved = localStorage.getItem(CLIENT_ID_KEY);
+    const saved = localStorage.getItem(STORAGE_KEYS.CLIENT_ID);
     if (saved) return saved;
     const id = makeId();
-    localStorage.setItem(CLIENT_ID_KEY, id);
+    localStorage.setItem(STORAGE_KEYS.CLIENT_ID, id);
     return id;
   });
 
-  const [userName, setUserName] = useState(() => readStoredName(USER_NAME_KEY));
+  const [userName, setUserName] = useState(() => readStoredName(STORAGE_KEYS.USER_NAME));
   const t = useMemo(() => makeTheme(theme), [theme]);
 
   const ui = useMemo(() => {
@@ -319,8 +308,8 @@ export default function DashboardPage() {
   const [openAtts, setOpenAtts] = useState(false);
   const [openStates, setOpenStates] = useState(false);
 
-  useEffect(() => localStorage.setItem(THEME_KEY, theme), [theme]);
-  useEffect(() => localStorage.setItem(LANG_KEY, lang), [lang]);
+  useEffect(() => localStorage.setItem(STORAGE_KEYS.THEME, theme), [theme]);
+  useEffect(() => localStorage.setItem(STORAGE_KEYS.LANG, lang), [lang]);
 
   useEffect(() => {
     let mounted = true;
@@ -333,12 +322,12 @@ export default function DashboardPage() {
         const email = (fbUser.email || "").trim().toLowerCase();
         if (!email) return;
 
-        const saved = readStoredName(USER_NAME_KEY);
+        const saved = readStoredName(STORAGE_KEYS.USER_NAME);
         if (saved) return;
 
         const r = await resolveUserNameByEmail(email);
         if (mounted && r?.ok && r?.found && r?.name) {
-          localStorage.setItem(USER_NAME_KEY, r.name);
+          localStorage.setItem(STORAGE_KEYS.USER_NAME, r.name);
           setUserName(r.name);
         }
       } catch (e) {
@@ -875,10 +864,10 @@ export default function DashboardPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {topStates.map((s, i) => {
-                          const name = s?.name ?? s?.officeLabel ?? "—";
-                          const ttd = Number(s?.ttd ?? s?.total ?? 0);
-                          const convertedValue = Number(s?.convertedValue ?? 0);
+                        {topStates.map((stateItem, i) => {
+                          const name = stateItem?.name ?? stateItem?.officeLabel ?? "—";
+                          const ttd = Number(stateItem?.ttd ?? stateItem?.total ?? 0);
+                          const convertedValue = Number(stateItem?.convertedValue ?? 0);
                           return (
                             <tr key={`${name}-${i}`}>
                               <td style={{ padding: "10px 12px", borderBottom: `1px solid ${t.border}` }}>{name}</td>
