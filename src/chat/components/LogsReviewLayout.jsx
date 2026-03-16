@@ -1,6 +1,5 @@
 import React from "react";
 import BotPrettyAnswer from "./BotPrettyAnswer";
-import LogsPreviewBlock from "./LogsPreviewBlock";
 import PeerComparisonBlock from "./PeerComparisonBlock";
 import s from "../styles";
 
@@ -9,8 +8,7 @@ import s from "../styles";
  * 1. Performance diagnosis (si existe)
  * 2. Summary (análisis ejecutivo)
  * 3. Peer comparison (si existe)
- * 4. Recent cases (tabla de 5 casos)
- * 5. PDF link al final (acción secundaria)
+ * 4. PDF link al final (acción secundaria)
  */
 export default function LogsReviewLayout({ meta = {}, text, t, lang }) {
   const { logsPdfLink, logsPreview, peerComparison, analysisText, performanceDiagnosis } = meta;
@@ -76,15 +74,7 @@ export default function LogsReviewLayout({ meta = {}, text, t, lang }) {
         </>
       )}
 
-      {/* 3. Recent cases */}
-      {Array.isArray(logsPreview) && logsPreview.length > 0 && (
-        <>
-          <div style={separator} />
-          <LogsPreviewBlock logs={logsPreview} t={t} lang={lang} />
-        </>
-      )}
-
-      {/* 3. PDF link (acción secundaria al final) */}
+      {/* PDF link (acción secundaria al final) */}
       {logsPdfLink && (
         <>
           <div style={separator} />

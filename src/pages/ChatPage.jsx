@@ -101,6 +101,12 @@ function PickOptionsWithSearch({ options, messageId, onPickOption, loading, t, l
   );
 }
 
+/** Normaliza suggestion: string | { text, action? } → { text, action } */
+function normalizeSuggestion(s) {
+  if (s && typeof s === "object" && "text" in s) return { text: s.text, action: s.action || null };
+  return { text: String(s || ""), action: null };
+}
+
 /** Limpia label para UI: SOLO nombre (sin correo, sin "·", sin repetición) */
 function cleanPickLabel(label = "") {
   const raw = String(label || "");
@@ -120,8 +126,13 @@ export default function ChatPage() {
   const [loadingConvs, setLoadingConvs] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // Scope UI (lo manda el backend en cada respuesta)
-  const [scopeUi, setScopeUi] = useState({ mode: "general", label: "General" });
+  // Scope UI (lo manda el backend en cada respuesta). Por defecto: Submitter.
+  const [scopeUi, setScopeUi] = useState({
+    mode: "focus",
+    label: "Submitter",
+    badge: "Submitter",
+    changeHint: "Change filter",
+  });
 
   const [theme, setTheme] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.THEME);
@@ -180,7 +191,7 @@ export default function ChatPage() {
           historyLoadedRef.current = false;
           didInitClientIdRef.current = false;
           // reset scope cuando no hay user
-          setScopeUi({ mode: "general", label: "General" });
+          setScopeUi({ mode: "focus", label: "Submitter", badge: "Submitter", changeHint: "Change filter" });
           return;
         }
 
@@ -362,12 +373,11 @@ export default function ChatPage() {
           // RESTAURAR SCOPE desde el historial (último mensaje que lo tenga)
           const lastWithScope = [...history].reverse().find((m) => m?.meta?.scope?.label);
           if (lastWithScope?.meta?.scope?.label) setScopeUi(lastWithScope.meta.scope);
-          else setScopeUi({ mode: "general", label: "General" });
+          else setScopeUi({ mode: "focus", label: "Submitter", badge: "Submitter", changeHint: "Change filter" });
         } else {
           historyLoadedRef.current = false;
           setMessages([{ id: makeId(), from: "bot", text: ui.welcome, createdAt: Date.now() }]);
-          // reset scope si no hay historial
-          setScopeUi({ mode: "general", label: "General" });
+          setScopeUi({ mode: "focus", label: "Submitter", badge: "Submitter", changeHint: "Change filter" });
         }
 
         setUnreadCount(0);
@@ -610,6 +620,16 @@ export default function ChatPage() {
       pushBotError(ui.error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  /** Ejecuta acción cuando la sugerencia tiene action; si no, envía texto normal */
+  const handleSuggestionClick = (sugg) => {
+    const { text, action } = normalizeSuggestion(sugg);
+    if (action === "change_scope") {
+      handleSendText(lang === "es" ? "Cambiar filtro" : "Change scope", { preset: "change_scope" });
+    } else {
+      handleSendText(text);
     }
   };
 
@@ -1377,16 +1397,19 @@ export default function ChatPage() {
                                 />
                                 {Array.isArray(m?.suggestions) && m.suggestions.length > 0 && (
                                   <div style={{ ...s.suggestionsRow(t), marginTop: 12 }}>
-                                    {m.suggestions.map((suggText, i) => (
-                                      <button
-                                        key={`${m.id}-sugg-${i}`}
-                                        style={s.suggestionChip(t)}
-                                        onClick={() => handleSendText(suggText)}
-                                        title={suggText}
-                                      >
-                                        ✨ {suggText}
-                                      </button>
-                                    ))}
+                                    {m.suggestions.map((sugg, i) => {
+                                      const { text } = normalizeSuggestion(sugg);
+                                      return (
+                                        <button
+                                          key={`${m.id}-sugg-${i}`}
+                                          style={s.suggestionChip(t)}
+                                          onClick={() => handleSuggestionClick(sugg)}
+                                          title={text}
+                                        >
+                                          ✨ {text}
+                                        </button>
+                                      );
+                                    })}
                                   </div>
                                 )}
                               </>
@@ -1431,19 +1454,22 @@ export default function ChatPage() {
                                       lang={lang}
                                     />
                                   )}
-                                  {/* ✅ Suggestions siempre al final */}
+                                  {/* ✅ Suggestions siempre al final (pueden ser acciones, no solo texto) */}
                                   {Array.isArray(m?.suggestions) && m.suggestions.length > 0 && (
                                     <div style={s.suggestionsRow(t)}>
-                                      {m.suggestions.map((text, i) => (
-                                        <button
-                                          key={`${m.id || "m"}-sugg-${i}`}
-                                          style={s.suggestionChip(t)}
-                                          onClick={() => handleSendText(text)}
-                                          title={text}
-                                        >
-                                          ✨ {text}
-                                        </button>
-                                      ))}
+                                      {m.suggestions.map((sugg, i) => {
+                                        const { text } = normalizeSuggestion(sugg);
+                                        return (
+                                          <button
+                                            key={`${m.id || "m"}-sugg-${i}`}
+                                            style={s.suggestionChip(t)}
+                                            onClick={() => handleSuggestionClick(sugg)}
+                                            title={text}
+                                          >
+                                            ✨ {text}
+                                          </button>
+                                        );
+                                      })}
                                     </div>
                                   )}
                                 </>
